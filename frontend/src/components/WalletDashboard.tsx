@@ -385,7 +385,7 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
           <DialogTrigger asChild>
             <Button
               variant="outline"
-              className="h-14 border-white/10 bg-white/5 hover:bg-white hover:text-black hover:border-white transition-all text-base uppercase tracking-wider font-medium group"
+              className="h-14 border-white/10 bg-white/5 hover:bg-white hover:text-black hover:border-white transition-all text-base uppercase tracking-wider font-medium group cursor-pointer"
             >
               <ArrowUpRight className="mr-2 w-4 h-4 group-hover:scale-110 transition-transform" />
               Withdraw
@@ -412,7 +412,7 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
         {/* Swap - Placeholder for now */}
         <Button
           variant="outline"
-          className="h-14 border-white/10 bg-white/5 hover:bg-white hover:text-black hover:border-white transition-all text-base uppercase tracking-wider font-medium group"
+          className="h-14 border-white/10 bg-white/5 hover:bg-white hover:text-black hover:border-white transition-all text-base uppercase tracking-wider font-medium group cursor-pointer"
         >
           <ArrowLeftRight className="mr-2 w-4 h-4 group-hover:scale-110 transition-transform" />
           Swap
@@ -430,10 +430,11 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`pb-4 text-sm font-medium transition-colors relative ${activeTab === tab.id
+              className={`pb-4 text-sm font-medium transition-colors relative ${
+                activeTab === tab.id
                   ? "text-white"
                   : "text-white/40 hover:text-white/60"
-                }`}
+              }`}
             >
               {tab.label}
               {activeTab === tab.id && (
@@ -508,8 +509,9 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
                       >
                         <div className="flex items-center gap-4">
                           <div
-                            className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold overflow-hidden ${!logoUrl ? "bg-white/10" : ""
-                              }`}
+                            className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold overflow-hidden ${
+                              !logoUrl ? "bg-white/10" : ""
+                            }`}
                           >
                             {logoUrl ? (
                               <img
@@ -638,14 +640,17 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
                       if (diffMins < 1) {
                         timeAgo = "Just now";
                       } else if (diffMins < 60) {
-                        timeAgo = `${diffMins} min${diffMins > 1 ? "s" : ""
-                          } ago`;
+                        timeAgo = `${diffMins} min${
+                          diffMins > 1 ? "s" : ""
+                        } ago`;
                       } else if (diffHours < 24) {
-                        timeAgo = `${diffHours} hour${diffHours > 1 ? "s" : ""
-                          } ago`;
+                        timeAgo = `${diffHours} hour${
+                          diffHours > 1 ? "s" : ""
+                        } ago`;
                       } else {
-                        timeAgo = `${diffDays} day${diffDays > 1 ? "s" : ""
-                          } ago`;
+                        timeAgo = `${diffDays} day${
+                          diffDays > 1 ? "s" : ""
+                        } ago`;
                       }
 
                       // Truncate addresses for display
@@ -993,7 +998,7 @@ function DepositDialog({
       <DialogTrigger asChild>
         <Button
           variant="outline"
-          className="h-14 border-white/10 bg-white/5 hover:bg-white hover:text-black hover:border-white transition-all text-base uppercase tracking-wider font-medium group"
+          className="h-14 border-white/10 bg-white/5 hover:bg-white hover:text-black hover:border-white transition-all text-base uppercase tracking-wider font-medium group cursor-pointer"
         >
           <ArrowDownLeft className="mr-2 w-4 h-4 group-hover:scale-110 transition-transform" />
           Deposit
@@ -1035,8 +1040,8 @@ function DepositDialog({
                       currentStep === 1
                         ? "0%"
                         : currentStep === 2
-                          ? "50%"
-                          : "100%",
+                        ? "50%"
+                        : "100%",
                   }}
                   transition={{ duration: 0.5, ease: "circOut" }}
                 />
@@ -1052,10 +1057,11 @@ function DepositDialog({
                       className="relative z-10 flex flex-col items-center gap-2"
                     >
                       <motion.div
-                        className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-500 border backdrop-blur-md ${isActive
+                        className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-500 border backdrop-blur-md ${
+                          isActive
                             ? "bg-white text-black border-white shadow-[0_0_20px_rgba(255,255,255,0.4)]"
                             : "bg-black/40 text-white/20 border-white/10"
-                          }`}
+                        }`}
                         animate={{
                           scale: isCurrent ? 1.08 : 1,
                           y: isCurrent ? -1 : 0,
@@ -1064,14 +1070,15 @@ function DepositDialog({
                         {isCompleted ? <Check className="w-3.5 h-3.5" /> : step}
                       </motion.div>
                       <span
-                        className={`text-[9px] uppercase tracking-[0.2em] font-medium transition-colors duration-300 ${isCurrent ? "text-white" : "text-white/20"
-                          }`}
+                        className={`text-[9px] uppercase tracking-[0.2em] font-medium transition-colors duration-300 ${
+                          isCurrent ? "text-white" : "text-white/20"
+                        }`}
                       >
                         {step === 1
                           ? "Select"
                           : step === 2
-                            ? "Approve"
-                            : "Deposit"}
+                          ? "Approve"
+                          : "Deposit"}
                       </span>
                     </div>
                   );
@@ -1122,19 +1129,21 @@ function DepositDialog({
                                     : "rgba(255,255,255,0.08)",
                                 }}
                                 whileTap={{ scale: 0.99 }}
-                                className={`relative flex items-center justify-between p-4 rounded-2xl border transition-all duration-300 group ${isSelected
+                                className={`relative flex items-center justify-between p-4 rounded-2xl border transition-all duration-300 group ${
+                                  isSelected
                                     ? "bg-white/10 border-white text-white shadow-[0_0_30px_rgba(255,255,255,0.1)]"
                                     : "bg-white/5 border-white/5 text-white hover:border-white/20"
-                                  }`}
+                                }`}
                               >
                                 <div className="flex items-center gap-4">
                                   <div
-                                    className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold overflow-hidden transition-colors ${!logoUrl
+                                    className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold overflow-hidden transition-colors ${
+                                      !logoUrl
                                         ? isSelected
                                           ? "bg-white text-black"
                                           : "bg-white/10"
                                         : ""
-                                      }`}
+                                    }`}
                                   >
                                     {logoUrl ? (
                                       <img
@@ -1147,10 +1156,11 @@ function DepositDialog({
                                           const parent =
                                             e.currentTarget.parentElement!;
                                           parent.textContent = token.symbol[0];
-                                          parent.className = `w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold overflow-hidden transition-colors ${isSelected
+                                          parent.className = `w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold overflow-hidden transition-colors ${
+                                            isSelected
                                               ? "bg-white text-black"
                                               : "bg-white/10"
-                                            }`;
+                                          }`;
                                         }}
                                       />
                                     ) : (
@@ -1162,10 +1172,11 @@ function DepositDialog({
                                       {token.symbol}
                                     </div>
                                     <div
-                                      className={`text-xs font-medium ${isSelected
+                                      className={`text-xs font-medium ${
+                                        isSelected
                                           ? "text-white/60"
                                           : "text-white/40"
-                                        }`}
+                                      }`}
                                     >
                                       Balance: {token.formattedBalance}
                                     </div>
@@ -1188,10 +1199,11 @@ function DepositDialog({
                     </div>
 
                     <div
-                      className={`space-y-4 transition-all duration-500 ${selectedToken
+                      className={`space-y-4 transition-all duration-500 ${
+                        selectedToken
                           ? "opacity-100 translate-y-0"
                           : "opacity-30 translate-y-4 pointer-events-none blur-sm"
-                        }`}
+                      }`}
                     >
                       <div className="flex items-center justify-between px-1">
                         <label className="text-[10px] uppercase tracking-[0.2em] text-white/60 font-semibold">
@@ -1255,10 +1267,11 @@ function DepositDialog({
                         : "";
                       return (
                         <div
-                          className={`w-16 h-16 rounded-full border border-white/10 flex items-center justify-center backdrop-blur-md overflow-hidden ${!logoUrl
+                          className={`w-16 h-16 rounded-full border border-white/10 flex items-center justify-center backdrop-blur-md overflow-hidden ${
+                            !logoUrl
                               ? "bg-gradient-to-br from-white/10 to-transparent"
                               : ""
-                            }`}
+                          }`}
                         >
                           {logoUrl ? (
                             <img
@@ -1364,8 +1377,9 @@ function DepositDialog({
                               : "";
                             return (
                               <div
-                                className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] overflow-hidden ${!logoUrl ? "bg-white/10" : ""
-                                  }`}
+                                className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] overflow-hidden ${
+                                  !logoUrl ? "bg-white/10" : ""
+                                }`}
                               >
                                 {logoUrl ? (
                                   <img
@@ -1499,12 +1513,12 @@ function DepositDialog({
                   {currentStep === 1
                     ? "Continue"
                     : currentStep === 2
-                      ? isApprovePending || isApproveConfirming
-                        ? "Approving..."
-                        : "Approve Token"
-                      : isDepositPending || isDepositConfirming
-                        ? "Depositing..."
-                        : "Confirm Deposit"}
+                    ? isApprovePending || isApproveConfirming
+                      ? "Approving..."
+                      : "Approve Token"
+                    : isDepositPending || isDepositConfirming
+                    ? "Depositing..."
+                    : "Confirm Deposit"}
                 </Button>
               </div>
             </div>
@@ -1647,7 +1661,7 @@ function SendTokenDialog({
       <DialogTrigger asChild>
         <Button
           variant="outline"
-          className="h-14 border-white/10 bg-white/5 hover:bg-white hover:text-black hover:border-white transition-all text-base uppercase tracking-wider font-medium group"
+          className="h-14 border-white/10 bg-white/5 hover:bg-white hover:text-black hover:border-white transition-all text-base uppercase tracking-wider font-medium group cursor-pointer"
         >
           <ArrowRight className="mr-2 w-4 h-4 group-hover:scale-110 transition-transform" />
           Send
@@ -1705,19 +1719,21 @@ function SendTokenDialog({
                               : "rgba(255,255,255,0.08)",
                           }}
                           whileTap={{ scale: 0.99 }}
-                          className={`relative flex items-center justify-between p-4 rounded-2xl border transition-all duration-300 group ${isSelected
+                          className={`relative flex items-center justify-between p-4 rounded-2xl border transition-all duration-300 group ${
+                            isSelected
                               ? "bg-white/10 border-white text-white shadow-[0_0_30px_rgba(255,255,255,0.1)]"
                               : "bg-white/5 border-white/5 text-white hover:border-white/20"
-                            }`}
+                          }`}
                         >
                           <div className="flex items-center gap-4">
                             <div
-                              className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold overflow-hidden transition-colors ${!logoUrl
+                              className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold overflow-hidden transition-colors ${
+                                !logoUrl
                                   ? isSelected
                                     ? "bg-white text-black"
                                     : "bg-white/10"
                                   : ""
-                                }`}
+                              }`}
                             >
                               {logoUrl ? (
                                 <img
@@ -1728,11 +1744,13 @@ function SendTokenDialog({
                                     e.currentTarget.style.display = "none";
                                     const parent =
                                       e.currentTarget.parentElement!;
-                                    parent.textContent = token.symbol?.[0] ?? "?";
-                                    parent.className = `w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold overflow-hidden transition-colors ${isSelected
+                                    parent.textContent =
+                                      token.symbol?.[0] ?? "?";
+                                    parent.className = `w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold overflow-hidden transition-colors ${
+                                      isSelected
                                         ? "bg-white text-black"
                                         : "bg-white/10"
-                                      }`;
+                                    }`;
                                   }}
                                 />
                               ) : (
@@ -1744,10 +1762,9 @@ function SendTokenDialog({
                                 {token.symbol}
                               </div>
                               <div
-                                className={`text-xs font-medium ${isSelected
-                                    ? "text-white/60"
-                                    : "text-white/40"
-                                  }`}
+                                className={`text-xs font-medium ${
+                                  isSelected ? "text-white/60" : "text-white/40"
+                                }`}
                               >
                                 Balance: {token.amount.toFixed(6)}
                               </div>
@@ -1771,10 +1788,11 @@ function SendTokenDialog({
 
               {/* Send Details */}
               <div
-                className={`space-y-5 transition-all duration-500 ${selectedToken
+                className={`space-y-5 transition-all duration-500 ${
+                  selectedToken
                     ? "opacity-100 translate-y-0"
                     : "opacity-30 translate-y-4 pointer-events-none blur-sm"
-                  }`}
+                }`}
               >
                 {/* Recipient Address */}
                 <div className="space-y-2">
@@ -1797,7 +1815,9 @@ function SendTokenDialog({
                     </label>
                     {selectedToken && (
                       <button
-                        onClick={() => setAmount(selectedToken.amount.toString())}
+                        onClick={() =>
+                          setAmount(selectedToken.amount.toString())
+                        }
                         className="text-[10px] bg-white/10 hover:bg-white text-white hover:text-black px-3 py-1 rounded-full transition-all uppercase tracking-wider font-medium"
                       >
                         Max: {selectedToken.amount.toFixed(6)}
