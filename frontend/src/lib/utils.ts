@@ -8,12 +8,19 @@ export function cn(...inputs: ClassValue[]) {
 
 export function getTokenLogoUrl(address: string): string {
   try {
+    const lowerAddress = address.toLowerCase();
+
     // ETH Address (Zero Address)
-    if (address === "0x0000000000000000000000000000000000000000") {
-      return "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png";
+    if (lowerAddress === "0x0000000000000000000000000000000000000000") {
+      return "https://assets.coingecko.com/coins/images/279/small/ethereum.png";
     }
 
-    // Ensure checksum address format
+    // Base Sepolia USDC - use mainnet USDC logo from CoinGecko
+    if (lowerAddress === "0x036cbd53842c5426634e7929541ec2318f3dcf7e") {
+      return "https://assets.coingecko.com/coins/images/6319/small/usdc.png";
+    }
+
+    // Fallback to Trust Wallet for mainnet tokens
     const checksumAddress = getAddress(address);
     return `https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/${checksumAddress}/logo.png`;
   } catch {

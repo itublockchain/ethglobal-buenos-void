@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowUpRight,
@@ -185,7 +185,7 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
     };
   }, []);
 
-  const refreshBalances = async () => {
+  const refreshBalances = useCallback(async () => {
     try {
       setIsLoadingBalances(true);
       setBalanceError(null);
@@ -199,9 +199,9 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
     } finally {
       setIsLoadingBalances(false);
     }
-  };
+  }, []);
 
-  const refreshTransactions = async () => {
+  const refreshTransactions = useCallback(async () => {
     try {
       setIsLoadingTransactions(true);
       setTransactionsError(null);
@@ -218,7 +218,7 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
     } finally {
       setIsLoadingTransactions(false);
     }
-  };
+  }, []);
   // Calculate total USD value from backend balances
   const totalUsdFromBackend = useMemo(() => {
     // backendBalances array of objects with amount and value properties
@@ -348,6 +348,11 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
     });
   }, [backendBalances, wallet.assets, tokenMetadata, unknownTokens]);
 
+  // Memoized onSuccess callback for DepositDialog
+  const handleDepositSuccess = useCallback(async () => {
+    await Promise.all([refreshBalances(), refreshTransactions()]);
+  }, [refreshBalances, refreshTransactions]);
+
   return (
     <>
       {/* Balance Display */}
@@ -373,7 +378,7 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
       {/* Action Buttons */}
       <div className="grid grid-cols-4 gap-4 mb-16">
         {/* Deposit */}
-        <DepositDialog />
+        <DepositDialog onSuccess={handleDepositSuccess} />
 
         {/* Withdraw */}
         <Dialog>
@@ -401,9 +406,7 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
 
         <SendTokenDialog
           tokens={assetsFromBackend}
-          onSuccess={async () => {
-            await Promise.all([refreshBalances(), refreshTransactions()]);
-          }}
+          onSuccess={handleDepositSuccess}
         />
 
         {/* Swap - Placeholder for now */}
@@ -505,17 +508,23 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
                         className="flex items-center justify-between p-4 bg-[#0A0A0A] border border-white/5 hover:border-white/10 transition-colors group cursor-pointer"
                       >
                         <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-sm font-bold overflow-hidden">
+                          <div
+                            className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold overflow-hidden ${
+                              !logoUrl ? "bg-white/10" : ""
+                            }`}
+                          >
                             {logoUrl ? (
                               <img
                                 src={logoUrl}
                                 alt={asset.symbol}
-                                className="w-full h-full object-cover"
+                                className="w-full h-full object-contain bg-transparent"
                                 onError={(e) => {
                                   // If image fails to load, hide it and show fallback
                                   e.currentTarget.style.display = "none";
-                                  e.currentTarget.parentElement!.innerText =
-                                    asset.symbol?.[0] ?? "?";
+                                  const parent = e.currentTarget.parentElement!;
+                                  parent.innerText = asset.symbol?.[0] ?? "?";
+                                  parent.className =
+                                    "w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-sm font-bold overflow-hidden";
                                 }}
                               />
                             ) : (
@@ -711,7 +720,11 @@ function formatTokenBalance(value: bigint, decimals: number) {
   });
 }
 
-function DepositDialog() {
+function DepositDialog({
+  onSuccess,
+}: {
+  onSuccess?: () => Promise<void> | void;
+}) {
   const { address } = useAccount();
   const [open, setOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
@@ -720,6 +733,13 @@ function DepositDialog() {
   >();
   const [depositAmount, setDepositAmount] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const hasCalledOnSuccessRef = useRef(false);
+  const onSuccessRef = useRef(onSuccess);
+
+  // Keep onSuccess ref up to date
+  useEffect(() => {
+    onSuccessRef.current = onSuccess;
+  }, [onSuccess]);
 
   // Public wallet token balances (connected wallet)
   const { data: ethBalance } = useBalance({
@@ -848,19 +868,35 @@ function DepositDialog() {
     }
   }, [isApproveSuccess, currentStep]);
 
-  // Handle deposit success - close modal
+  // Handle deposit success - refresh and close modal
   useEffect(() => {
-    if (isDepositSuccess && currentStep === 3) {
-      setTimeout(() => {
+    if (isDepositSuccess && !hasCalledOnSuccessRef.current) {
+      hasCalledOnSuccessRef.current = true;
+
+      // Call success callback to refresh balances
+      if (onSuccessRef.current) {
+        Promise.resolve(onSuccessRef.current()).catch((err) =>
+          console.error("Failed to refresh after deposit:", err)
+        );
+      }
+
+      // Close modal after delay
+      const closeTimer = setTimeout(() => {
         setOpen(false);
-        // Reset state
-        setCurrentStep(1);
-        setSelectedTokenAddress(undefined);
-        setDepositAmount("");
-        setError(null);
-      }, 2000);
+        // Reset state after closing
+        const resetTimer = setTimeout(() => {
+          setCurrentStep(1);
+          setSelectedTokenAddress(undefined);
+          setDepositAmount("");
+          setError(null);
+          hasCalledOnSuccessRef.current = false; // Reset flag
+        }, 300);
+        return () => clearTimeout(resetTimer);
+      }, 1500);
+
+      return () => clearTimeout(closeTimer);
     }
-  }, [isDepositSuccess, currentStep]);
+  }, [isDepositSuccess]);
 
   // Handle approve
   const handleApprove = async () => {
@@ -945,6 +981,7 @@ function DepositDialog() {
             setSelectedTokenAddress(undefined);
             setDepositAmount("");
             setError(null);
+            hasCalledOnSuccessRef.current = false;
           }, 200);
         }
       }}
@@ -958,330 +995,519 @@ function DepositDialog() {
           Deposit
         </Button>
       </DialogTrigger>
-      <DialogContent className="bg-[#050505] border border-white/10 text-white max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Deposit Funds</DialogTitle>
-          <DialogDescription className="text-white/60">
-            Void Wallet&apos;a ERC20 token yatırın.
+      <DialogContent className="bg-[#050505]/90 backdrop-blur-xl border border-white/10 text-white max-w-md p-0 gap-0 overflow-hidden shadow-2xl shadow-black/80">
+        <DialogHeader className="p-8 pb-6 border-b border-white/5">
+          <DialogTitle className="text-2xl font-light tracking-wide text-white">
+            Deposit Funds
+          </DialogTitle>
+          <DialogDescription className="text-white/40 text-xs uppercase tracking-widest font-medium mt-2">
+            Add assets to your Void Wallet
           </DialogDescription>
         </DialogHeader>
 
         {!address ? (
-          <div className="text-center text-white/60 border border-white/10 rounded-2xl py-12 text-sm">
-            Lütfen cüzdanınızı bağlayın.
+          <div className="p-12 text-center">
+            <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center mx-auto mb-6 text-white/20 border border-white/5">
+              <ArrowDownLeft className="w-8 h-8" />
+            </div>
+            <p className="text-white/60 text-sm font-light">
+              Please connect your wallet to continue.
+            </p>
           </div>
         ) : (
-          <div className="space-y-6">
-            {/* Progress Steps */}
-            <div className="flex items-center justify-between">
-              {[1, 2, 3].map((step) => (
-                <div key={step} className="flex items-center flex-1">
-                  <div
-                    className={`flex items-center justify-center w-8 h-8 rounded-full border-2 text-sm font-bold transition-all ${
-                      currentStep >= step
-                        ? "border-white bg-white text-black"
-                        : "border-white/20 text-white/40"
-                    }`}
-                  >
-                    {step === 2 && isApproveSuccess ? (
-                      <Check className="w-4 h-4" />
-                    ) : step === 3 && isDepositSuccess ? (
-                      <Check className="w-4 h-4" />
-                    ) : (
-                      step
-                    )}
-                  </div>
-                  {step < 3 && (
+          <div className="flex flex-col max-h-[600px]">
+            {/* Progress Steps - Premium */}
+            <div className="px-10 py-4 border-b border-white/5 bg-white/[0.01]">
+              <div className="relative flex items-center justify-between">
+                {/* Connecting Line Background */}
+                <div className="absolute left-0 top-[15px] w-full h-[2px] bg-white/5 z-0 rounded-full" />
+
+                {/* Active Line Progress */}
+                <motion.div
+                  className="absolute left-0 top-[15px] h-[2px] bg-gradient-to-r from-white/40 to-white z-0 rounded-full"
+                  initial={{ width: "0%" }}
+                  animate={{
+                    width:
+                      currentStep === 1
+                        ? "0%"
+                        : currentStep === 2
+                        ? "50%"
+                        : "100%",
+                  }}
+                  transition={{ duration: 0.5, ease: "circOut" }}
+                />
+
+                {[1, 2, 3].map((step) => {
+                  const isActive = currentStep >= step;
+                  const isCompleted = currentStep > step;
+                  const isCurrent = currentStep === step;
+
+                  return (
                     <div
-                      className={`flex-1 h-0.5 mx-2 transition-all ${
-                        currentStep > step ? "bg-white" : "bg-white/20"
-                      }`}
-                    />
-                  )}
-                </div>
-              ))}
-            </div>
-
-            <div className="flex justify-between text-xs text-white/40 -mt-2">
-              <span>Token Seç</span>
-              <span>Onayla</span>
-              <span>Yatır</span>
-            </div>
-
-            {/* Step 1: Select Token & Amount */}
-            {currentStep === 1 && (
-              <div className="space-y-4">
-                <div className="text-sm font-medium text-white">
-                  1. ERC20 Token Seçin
-                </div>
-                <div className="text-xs text-white/60 mb-4">
-                  Public Wallet&apos;taki bakiyeleriniz:
-                </div>
-
-                <div className="space-y-2 max-h-60 overflow-y-auto">
-                  {publicWalletTokens.length === 0 ? (
-                    <div className="text-center text-white/40 py-8 text-sm border border-white/10 rounded-2xl">
-                      Public wallet&apos;ta ERC20 token bulunamadı.
+                      key={step}
+                      className="relative z-10 flex flex-col items-center gap-2"
+                    >
+                      <motion.div
+                        className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-500 border backdrop-blur-md ${
+                          isActive
+                            ? "bg-white text-black border-white shadow-[0_0_20px_rgba(255,255,255,0.4)]"
+                            : "bg-black/40 text-white/20 border-white/10"
+                        }`}
+                        animate={{
+                          scale: isCurrent ? 1.08 : 1,
+                          y: isCurrent ? -1 : 0,
+                        }}
+                      >
+                        {isCompleted ? <Check className="w-3.5 h-3.5" /> : step}
+                      </motion.div>
+                      <span
+                        className={`text-[9px] uppercase tracking-[0.2em] font-medium transition-colors duration-300 ${
+                          isCurrent ? "text-white" : "text-white/20"
+                        }`}
+                      >
+                        {step === 1
+                          ? "Select"
+                          : step === 2
+                          ? "Approve"
+                          : "Deposit"}
+                      </span>
                     </div>
-                  ) : (
-                    publicWalletTokens.map((token) => {
-                      const isSelected = selectedTokenAddress === token.address;
-                      const logoUrl = getTokenLogoUrl(token.address);
+                  );
+                })}
+              </div>
+            </div>
 
+            {/* Content Area */}
+            <div className="flex-1 overflow-y-auto p-6 custom-scrollbar-left relative">
+              <motion.div
+                key={currentStep}
+                initial={{ opacity: 0, y: 10, filter: "blur(4px)" }}
+                animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                exit={{ opacity: 0, y: -10, filter: "blur(4px)" }}
+                transition={{ duration: 0.4, ease: "easeOut" }}
+                className="h-full flex flex-col"
+              >
+                {/* Step 1: Select Token & Amount */}
+                {currentStep === 1 && (
+                  <div className="space-y-5">
+                    <div className="space-y-4">
+                      <label className="text-[10px] uppercase tracking-[0.2em] text-white/60 font-semibold ml-1">
+                        Select Asset
+                      </label>
+                      <div className="grid gap-3">
+                        {publicWalletTokens.length === 0 ? (
+                          <div className="text-center py-10 border border-dashed border-white/10 rounded-2xl bg-white/[0.02]">
+                            <span className="text-sm text-white/40 font-light">
+                              No supported assets found
+                            </span>
+                          </div>
+                        ) : (
+                          publicWalletTokens.map((token) => {
+                            const isSelected =
+                              selectedTokenAddress === token.address;
+                            const logoUrl = getTokenLogoUrl(token.address);
+
+                            return (
+                              <motion.button
+                                key={token.address}
+                                onClick={() =>
+                                  setSelectedTokenAddress(token.address)
+                                }
+                                whileHover={{
+                                  scale: 1.01,
+                                  backgroundColor: isSelected
+                                    ? "rgba(255,255,255,0.15)"
+                                    : "rgba(255,255,255,0.08)",
+                                }}
+                                whileTap={{ scale: 0.99 }}
+                                className={`relative flex items-center justify-between p-4 rounded-2xl border transition-all duration-300 group ${
+                                  isSelected
+                                    ? "bg-white/10 border-white text-white shadow-[0_0_30px_rgba(255,255,255,0.1)]"
+                                    : "bg-white/5 border-white/5 text-white hover:border-white/20"
+                                }`}
+                              >
+                                <div className="flex items-center gap-4">
+                                  <div
+                                    className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold overflow-hidden transition-colors ${
+                                      !logoUrl
+                                        ? isSelected
+                                          ? "bg-white text-black"
+                                          : "bg-white/10"
+                                        : ""
+                                    }`}
+                                  >
+                                    {logoUrl ? (
+                                      <img
+                                        src={logoUrl}
+                                        alt={token.symbol}
+                                        className="w-full h-full object-contain bg-transparent"
+                                        onError={(e) => {
+                                          e.currentTarget.style.display =
+                                            "none";
+                                          const parent =
+                                            e.currentTarget.parentElement!;
+                                          parent.textContent = token.symbol[0];
+                                          parent.className = `w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold overflow-hidden transition-colors ${
+                                            isSelected
+                                              ? "bg-white text-black"
+                                              : "bg-white/10"
+                                          }`;
+                                        }}
+                                      />
+                                    ) : (
+                                      token.symbol[0]
+                                    )}
+                                  </div>
+                                  <div className="text-left">
+                                    <div className="font-bold text-sm tracking-wide">
+                                      {token.symbol}
+                                    </div>
+                                    <div
+                                      className={`text-xs font-medium ${
+                                        isSelected
+                                          ? "text-white/60"
+                                          : "text-white/40"
+                                      }`}
+                                    >
+                                      Balance: {token.formattedBalance}
+                                    </div>
+                                  </div>
+                                </div>
+                                {isSelected && (
+                                  <motion.div
+                                    initial={{ scale: 0 }}
+                                    animate={{ scale: 1 }}
+                                    className="w-6 h-6 rounded-full bg-white text-black flex items-center justify-center"
+                                  >
+                                    <Check className="w-3 h-3" />
+                                  </motion.div>
+                                )}
+                              </motion.button>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+
+                    <div
+                      className={`space-y-4 transition-all duration-500 ${
+                        selectedToken
+                          ? "opacity-100 translate-y-0"
+                          : "opacity-30 translate-y-4 pointer-events-none blur-sm"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between px-1">
+                        <label className="text-[10px] uppercase tracking-[0.2em] text-white/60 font-semibold">
+                          Amount
+                        </label>
+                        {selectedToken && (
+                          <button
+                            onClick={() =>
+                              setDepositAmount(
+                                formatUnits(
+                                  selectedToken.balance,
+                                  selectedToken.decimals
+                                )
+                              )
+                            }
+                            className="text-[10px] bg-white/10 hover:bg-white text-white hover:text-black px-3 py-1 rounded-full transition-all uppercase tracking-wider font-medium"
+                          >
+                            Max: {selectedToken.formattedBalance}
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="relative group">
+                        <Input
+                          placeholder="0.00"
+                          type="text"
+                          value={depositAmount}
+                          onChange={(e) => {
+                            // Only allow numbers and decimals
+                            if (/^\d*\.?\d*$/.test(e.target.value)) {
+                              setDepositAmount(e.target.value);
+                            }
+                          }}
+                          className="h-20 bg-black/40 border border-white/10 focus:border-white/50 focus:bg-black/60 text-4xl font-light pl-6 pr-20 rounded-2xl transition-all placeholder:text-white/30 text-white shadow-inner"
+                        />
+                        <div className="absolute right-6 top-1/2 -translate-y-1/2 text-lg font-medium text-white/30 pointer-events-none">
+                          {selectedToken?.symbol || ""}
+                        </div>
+                      </div>
+
+                      {isInsufficientBalance && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -5 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="text-xs text-red-400 flex items-center gap-2 px-2"
+                        >
+                          <div className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+                          Insufficient balance
+                        </motion.div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Step 2: Approve */}
+                {currentStep === 2 && (
+                  <div className="flex flex-col h-full justify-start items-center text-center space-y-4">
+                    {(() => {
+                      const logoUrl = selectedToken
+                        ? getTokenLogoUrl(selectedToken.address)
+                        : "";
                       return (
-                        <button
-                          key={token.address}
-                          type="button"
-                          onClick={() => setSelectedTokenAddress(token.address)}
-                          className={`relative flex w-full items-center justify-between gap-4 rounded-2xl border p-4 text-left transition-colors ${
-                            isSelected
-                              ? "border-white/60 bg-white/5"
-                              : "border-white/10 bg-black/20 hover:border-white/30"
+                        <div
+                          className={`w-16 h-16 rounded-full border border-white/10 flex items-center justify-center backdrop-blur-md overflow-hidden ${
+                            !logoUrl
+                              ? "bg-gradient-to-br from-white/10 to-transparent"
+                              : ""
                           }`}
                         >
-                          <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-sm font-bold overflow-hidden">
-                              {logoUrl ? (
-                                <img
-                                  src={logoUrl}
-                                  alt={token.symbol}
-                                  className="w-full h-full object-cover"
-                                  onError={(e) => {
-                                    e.currentTarget.style.display = "none";
-                                    e.currentTarget.parentElement!.textContent =
-                                      token.symbol[0];
-                                  }}
-                                />
-                              ) : (
-                                token.symbol[0]
-                              )}
+                          {logoUrl ? (
+                            <img
+                              src={logoUrl}
+                              alt={selectedToken?.symbol}
+                              className="w-full h-full object-contain bg-transparent p-2.5"
+                              onError={(e) => {
+                                e.currentTarget.style.display = "none";
+                                const parent = e.currentTarget.parentElement!;
+                                parent.className =
+                                  "w-16 h-16 rounded-full bg-gradient-to-br from-white/10 to-transparent border border-white/10 flex items-center justify-center backdrop-blur-md overflow-hidden";
+                                const fallback = document.createElement("div");
+                                fallback.className =
+                                  "text-2xl font-bold text-white";
+                                fallback.textContent =
+                                  selectedToken?.symbol[0] || "?";
+                                parent.appendChild(fallback);
+                              }}
+                            />
+                          ) : (
+                            <div className="text-2xl font-bold text-white">
+                              {selectedToken?.symbol[0]}
                             </div>
-                            <div>
-                              <div className="font-bold text-white text-sm">
-                                {token.symbol}
-                              </div>
-                              <div className="text-xs text-white/40">
-                                Bakiye: {token.formattedBalance}
-                              </div>
-                            </div>
-                          </div>
-                          {isSelected && (
-                            <Check className="w-5 h-5 text-white" />
                           )}
-                        </button>
+                        </div>
                       );
-                    })
-                  )}
-                </div>
+                    })()}
 
-                {selectedToken && (
-                  <div className="space-y-2 pt-4">
-                    <span className="text-[11px] text-white/50 tracking-[0.3em] uppercase">
-                      Miktar
-                    </span>
-                    <Input
-                      placeholder="0.0"
-                      type="text"
-                      value={depositAmount}
-                      onChange={(e) => setDepositAmount(e.target.value)}
-                      className="bg-black/40 border-white/20 text-white placeholder:text-white/30"
-                    />
-                    <div className="text-[11px] text-white/40">
-                      Mevcut: {selectedToken.formattedBalance}{" "}
-                      {selectedToken.symbol}
+                    <div className="space-y-2">
+                      <h3 className="text-xl font-light text-white tracking-wide">
+                        Approve {selectedToken?.symbol}
+                      </h3>
+                      <p className="text-sm text-white/50 max-w-[280px] mx-auto leading-relaxed">
+                        Allow the Void Wallet contract to spend your{" "}
+                        <span className="text-white font-medium">
+                          {depositAmount} {selectedToken?.symbol}
+                        </span>
+                        .
+                      </p>
                     </div>
-                    {isInsufficientBalance && depositAmount && (
-                      <div className="text-[11px] text-red-400">
-                        Yetersiz bakiye
+
+                    <div className="w-full bg-white/5 rounded-2xl p-4 border border-white/5 backdrop-blur-sm">
+                      <div className="flex justify-between items-center text-sm mb-2">
+                        <span className="text-white/40 uppercase tracking-wider text-xs">
+                          Amount
+                        </span>
+                        <span className="font-mono text-white text-sm">
+                          {depositAmount} {selectedToken?.symbol}
+                        </span>
                       </div>
-                    )}
+                      <div className="w-full h-[1px] bg-white/5 mb-2" />
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-white/40 uppercase tracking-wider text-xs">
+                          Contract
+                        </span>
+                        <span className="font-mono text-white/60 text-xs bg-white/5 px-2 py-1 rounded">
+                          {VOID_CONTRACT_ADDRESS.slice(0, 6)}...
+                          {VOID_CONTRACT_ADDRESS.slice(-4)}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 )}
 
-                <Button
-                  variant="outline"
-                  className="w-full h-12 uppercase tracking-[0.3em] text-xs text-white/80 border-white/30 hover:border-white hover:bg-white hover:text-black transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  onClick={() => {
-                    if (needsApproval) {
-                      setCurrentStep(2);
-                    } else {
-                      setCurrentStep(3);
-                    }
-                  }}
-                  disabled={
-                    !selectedToken ||
-                    !depositAmount ||
-                    isInsufficientBalance ||
-                    parsedAmount <= 0
-                  }
-                >
-                  Devam Et
-                </Button>
-              </div>
-            )}
+                {/* Step 3: Deposit */}
+                {currentStep === 3 && (
+                  <div className="flex flex-col h-full justify-start items-center text-center space-y-4">
+                    <motion.div
+                      initial={{ scale: 0.8, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{
+                        type: "spring",
+                        stiffness: 200,
+                        damping: 15,
+                      }}
+                      className="w-16 h-16 rounded-full bg-white text-black flex items-center justify-center shadow-[0_0_40px_rgba(255,255,255,0.3)]"
+                    >
+                      <ArrowDownLeft className="w-8 h-8" />
+                    </motion.div>
 
-            {/* Step 2: Approve */}
-            {currentStep === 2 && (
-              <div className="space-y-4">
-                <div className="text-sm font-medium text-white">
-                  2. ERC20 Token Onayı
-                </div>
-                <div className="text-xs text-white/60 mb-4">
-                  Void Contract&apos;ın tokenlarınızı harcamasına izin verin.
-                </div>
+                    <div className="space-y-2">
+                      <h3 className="text-xl font-light text-white tracking-wide">
+                        Confirm Deposit
+                      </h3>
+                      <p className="text-sm text-white/50 max-w-[280px] mx-auto leading-relaxed">
+                        You are about to deposit{" "}
+                        <span className="text-white font-medium">
+                          {depositAmount} {selectedToken?.symbol}
+                        </span>{" "}
+                        into your Void Wallet.
+                      </p>
+                    </div>
 
-                <div className="rounded-2xl border border-white/10 bg-black/20 p-6 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-white/60">Token:</span>
-                    <span className="text-sm font-bold text-white">
-                      {selectedToken?.symbol}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-white/60">Miktar:</span>
-                    <span className="text-sm font-bold text-white">
-                      {depositAmount} {selectedToken?.symbol}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-white/60">Contract:</span>
-                    <span className="text-xs font-mono text-white/80">
-                      {VOID_CONTRACT_ADDRESS.slice(0, 10)}...
-                      {VOID_CONTRACT_ADDRESS.slice(-8)}
-                    </span>
-                  </div>
-                </div>
-
-                {approveError && (
-                  <div className="text-xs text-red-400 text-center">
-                    {approveError.message}
+                    <div className="w-full bg-white/5 rounded-2xl p-4 border border-white/5 backdrop-blur-sm">
+                      <div className="flex justify-between items-center text-sm mb-2">
+                        <span className="text-white/40 uppercase tracking-wider text-xs">
+                          Asset
+                        </span>
+                        <div className="flex items-center gap-2">
+                          {(() => {
+                            const logoUrl = selectedToken
+                              ? getTokenLogoUrl(selectedToken.address)
+                              : "";
+                            return (
+                              <div
+                                className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] overflow-hidden ${
+                                  !logoUrl ? "bg-white/10" : ""
+                                }`}
+                              >
+                                {logoUrl ? (
+                                  <img
+                                    src={logoUrl}
+                                    alt={selectedToken?.symbol}
+                                    className="w-full h-full object-contain bg-transparent"
+                                    onError={(e) => {
+                                      e.currentTarget.style.display = "none";
+                                      const parent =
+                                        e.currentTarget.parentElement!;
+                                      parent.textContent =
+                                        selectedToken?.symbol[0] || "?";
+                                      parent.className =
+                                        "w-5 h-5 rounded-full bg-white/10 flex items-center justify-center text-[10px] overflow-hidden";
+                                    }}
+                                  />
+                                ) : (
+                                  selectedToken?.symbol[0]
+                                )}
+                              </div>
+                            );
+                          })()}
+                          <span className="font-bold text-white text-sm">
+                            {selectedToken?.symbol}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="w-full h-[1px] bg-white/5 mb-2" />
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-white/40 uppercase tracking-wider text-xs">
+                          Total Amount
+                        </span>
+                        <span className="font-mono text-lg text-white">
+                          {depositAmount}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 )}
+              </motion.div>
+            </div>
 
-                {error && (
-                  <div className="text-xs text-red-400 text-center">
-                    {error}
-                  </div>
-                )}
-
-                {isApproveSuccess && (
-                  <div className="text-xs text-emerald-400 text-center">
-                    ✓ Onay başarılı! Bir sonraki adıma geçiliyor...
-                  </div>
-                )}
-
-                <div className="flex gap-3">
-                  <Button
-                    variant="outline"
-                    className="flex-1 h-12 uppercase tracking-[0.3em] text-xs text-white/60 border-white/20 hover:border-white/40 hover:bg-white/5 transition-all"
-                    onClick={() => setCurrentStep(1)}
-                    disabled={isApprovePending || isApproveConfirming}
+            {/* Footer Actions */}
+            <div className="p-6 pt-4 border-t border-white/5 bg-[#050505]/50 backdrop-blur-md relative z-20">
+              {/* Status Messages */}
+              <div className="absolute -top-10 left-0 w-full px-6 flex justify-center pointer-events-none">
+                {(approveError || depositError || error) &&
+                  !isApproveSuccess &&
+                  !isDepositSuccess && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10, scale: 0.9 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      className="bg-red-500/10 border border-red-500/20 text-red-400 text-xs px-4 py-2 rounded-full backdrop-blur-md shadow-lg shadow-red-900/20"
+                    >
+                      {approveError?.message || depositError?.message || error}
+                    </motion.div>
+                  )}
+                {isDepositSuccess && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.9 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs px-4 py-2 rounded-full backdrop-blur-md flex items-center gap-2 shadow-lg shadow-emerald-900/20"
                   >
-                    Geri
-                  </Button>
+                    <Check className="w-3 h-3" />
+                    Deposited successfully! Closing...
+                  </motion.div>
+                )}
+                {isApproveSuccess && currentStep === 2 && !isDepositSuccess && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.9 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs px-4 py-2 rounded-full backdrop-blur-md flex items-center gap-2 shadow-lg shadow-emerald-900/20"
+                  >
+                    <Check className="w-3 h-3" />
+                    Approved successfully
+                  </motion.div>
+                )}
+              </div>
+
+              <div className="flex gap-3">
+                {currentStep > 1 && (
                   <Button
-                    variant="outline"
-                    className="flex-1 h-12 uppercase tracking-[0.3em] text-xs text-white/80 border-white/30 hover:border-white hover:bg-white hover:text-black transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                    onClick={handleApprove}
+                    variant="ghost"
+                    onClick={() => {
+                      if (currentStep === 2) setCurrentStep(1);
+                      else if (currentStep === 3)
+                        needsApproval ? setCurrentStep(2) : setCurrentStep(1);
+                    }}
                     disabled={
                       isApprovePending ||
                       isApproveConfirming ||
-                      isApproveSuccess
-                    }
-                  >
-                    {isApprovePending || isApproveConfirming
-                      ? "Onaylanıyor..."
-                      : isApproveSuccess
-                      ? "Onaylandı ✓"
-                      : "Onayla"}
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* Step 3: Deposit */}
-            {currentStep === 3 && (
-              <div className="space-y-4">
-                <div className="text-sm font-medium text-white">
-                  3. Token Yatırma
-                </div>
-                <div className="text-xs text-white/60 mb-4">
-                  Tokenlarınızı Void Wallet&apos;a yatırın.
-                </div>
-
-                <div className="rounded-2xl border border-white/10 bg-black/20 p-6 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-white/60">Token:</span>
-                    <span className="text-sm font-bold text-white">
-                      {selectedToken?.symbol}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-white/60">Miktar:</span>
-                    <span className="text-sm font-bold text-white">
-                      {depositAmount} {selectedToken?.symbol}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-white/60">Hedef:</span>
-                    <span className="text-xs font-mono text-white/80">
-                      Void Wallet Contract
-                    </span>
-                  </div>
-                </div>
-
-                {depositError && (
-                  <div className="text-xs text-red-400 text-center">
-                    {depositError.message}
-                  </div>
-                )}
-
-                {error && (
-                  <div className="text-xs text-red-400 text-center">
-                    {error}
-                  </div>
-                )}
-
-                {isDepositSuccess && (
-                  <div className="text-xs text-emerald-400 text-center">
-                    ✓ Yatırma işlemi başarılı! Modal kapatılıyor...
-                  </div>
-                )}
-
-                <div className="flex gap-3">
-                  <Button
-                    variant="outline"
-                    className="flex-1 h-12 uppercase tracking-[0.3em] text-xs text-white/60 border-white/20 hover:border-white/40 hover:bg-white/5 transition-all"
-                    onClick={() => {
-                      if (needsApproval) {
-                        setCurrentStep(2);
-                      } else {
-                        setCurrentStep(1);
-                      }
-                    }}
-                    disabled={isDepositPending || isDepositConfirming}
-                  >
-                    Geri
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="flex-1 h-12 uppercase tracking-[0.3em] text-xs text-white/80 border-white/30 hover:border-white hover:bg-white hover:text-black transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                    onClick={handleDeposit}
-                    disabled={
                       isDepositPending ||
-                      isDepositConfirming ||
-                      isDepositSuccess
+                      isDepositConfirming
                     }
+                    className="h-12 px-6 text-white/40 hover:text-white hover:bg-white/5 uppercase tracking-widest text-xs font-medium rounded-xl"
                   >
-                    {isDepositPending || isDepositConfirming
-                      ? "Yatırılıyor..."
-                      : isDepositSuccess
-                      ? "Yatırıldı ✓"
-                      : "Yatır"}
+                    Back
                   </Button>
-                </div>
+                )}
+
+                <Button
+                  className="flex-1 h-12 bg-white text-black hover:bg-white/90 hover:scale-[1.02] active:scale-[0.98] transition-all uppercase tracking-[0.2em] text-xs font-bold disabled:opacity-50 disabled:hover:scale-100 rounded-xl shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:shadow-[0_0_30px_rgba(255,255,255,0.3)] disabled:bg-white/10 disabled:text-white/20 disabled:shadow-none"
+                  onClick={() => {
+                    if (currentStep === 1) {
+                      if (needsApproval) setCurrentStep(2);
+                      else setCurrentStep(3);
+                    } else if (currentStep === 2) {
+                      handleApprove();
+                    } else if (currentStep === 3) {
+                      handleDeposit();
+                    }
+                  }}
+                  disabled={
+                    (currentStep === 1 &&
+                      (!selectedToken ||
+                        !depositAmount ||
+                        isInsufficientBalance ||
+                        parsedAmount <= 0)) ||
+                    isApprovePending ||
+                    isApproveConfirming ||
+                    isDepositPending ||
+                    isDepositConfirming ||
+                    isDepositSuccess
+                  }
+                >
+                  {currentStep === 1
+                    ? "Continue"
+                    : currentStep === 2
+                    ? isApprovePending || isApproveConfirming
+                      ? "Approving..."
+                      : "Approve Token"
+                    : isDepositPending || isDepositConfirming
+                    ? "Depositing..."
+                    : "Confirm Deposit"}
+                </Button>
               </div>
-            )}
+            </div>
           </div>
         )}
       </DialogContent>
@@ -1463,16 +1689,22 @@ function SendTokenDialog({
                       }`}
                     >
                       <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-sm font-bold overflow-hidden">
+                        <div
+                          className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold overflow-hidden ${
+                            !logoUrl ? "bg-white/10" : ""
+                          }`}
+                        >
                           {logoUrl ? (
                             <img
                               src={logoUrl}
                               alt={token.symbol}
-                              className="w-full h-full object-cover"
+                              className="w-full h-full object-contain bg-transparent"
                               onError={(e) => {
                                 e.currentTarget.style.display = "none";
-                                e.currentTarget.parentElement!.textContent =
-                                  token.symbol?.[0] ?? "?";
+                                const parent = e.currentTarget.parentElement!;
+                                parent.textContent = token.symbol?.[0] ?? "?";
+                                parent.className =
+                                  "w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-sm font-bold overflow-hidden";
                               }}
                             />
                           ) : (

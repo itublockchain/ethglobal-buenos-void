@@ -69,6 +69,35 @@
     border-radius: 0;
   }
 
+  /* Custom Scrollbar Left */
+  .custom-scrollbar-left {
+    direction: rtl; /* Moves scrollbar to left */
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+  }
+
+  .custom-scrollbar-left::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .custom-scrollbar-left::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .custom-scrollbar-left::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.2);
+    border-radius: 20px;
+  }
+  
+  .custom-scrollbar-left::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(255, 255, 255, 0.4);
+  }
+
+  /* Reset direction for content */
+  .custom-scrollbar-left > * {
+    direction: ltr;
+  }
+
   @keyframes flow-1 {
     0% {
       background-position: 0% 0%;
