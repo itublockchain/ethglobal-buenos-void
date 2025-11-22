@@ -12,3 +12,7 @@ export interface TransactionProof {
   key: string;
   value: string;
 }
+
+export interface TransactionHistoryItem extends TransactionEntry {
+  type: 'sent' | 'received';
+}

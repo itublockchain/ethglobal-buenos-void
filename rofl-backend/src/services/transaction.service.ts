@@ -1,7 +1,7 @@
 import { SMT } from '@zk-kit/smt';
 import { keccak256, toBytes, concat } from 'viem';
-import { TransactionProof } from '../types/transaction.types';
-import { dbPut, dbGetAll } from './db.service';
+import { TransactionProof, TransactionEntry } from '../types/transaction.types';
+import { dbGet, dbPut, dbGetAll } from './db.service';
 import { getTxSecret } from './secret.service';
 
 // In-memory SMT instance for transactions
@@ -13,47 +13,26 @@ const hash = (childNodes: (string | bigint)[]): bigint => {
   return BigInt(keccak256(toBytes('0x' + concatenated)));
 };
 
-// Generate key for sender's transaction leaf
-const generateSenderKey = (
+// Generate key for transaction leaf (no timestamp - same key for same pair)
+const generateTxKey = (
   sender: string,
   receiver: string,
   token: string,
-  timestamp: number,
-  senderSecret: string
+  userSecret: string
 ): bigint => {
   const combined = concat([
     toBytes(sender.toLowerCase()),
     toBytes(receiver.toLowerCase()),
     toBytes(token.toLowerCase()),
-    toBytes(timestamp.toString()),
-    toBytes(senderSecret),
+    toBytes(userSecret),
   ]);
   return BigInt(keccak256(combined));
 };
 
-// Generate key for receiver's transaction leaf
-const generateReceiverKey = (
-  sender: string,
-  receiver: string,
-  token: string,
-  timestamp: number,
-  receiverSecret: string
-): bigint => {
-  const combined = concat([
-    toBytes(sender.toLowerCase()),
-    toBytes(receiver.toLowerCase()),
-    toBytes(token.toLowerCase()),
-    toBytes(timestamp.toString()),
-    toBytes(receiverSecret),
-  ]);
-  return BigInt(keccak256(combined));
-};
-
-// Convert amount to BigInt (using 18 decimal precision)
-const PRECISION = BigInt(10 ** 18);
-const toBigIntAmount = (amount: string): bigint => {
-  const num = parseFloat(amount);
-  return BigInt(Math.floor(num * Number(PRECISION)));
+// Hash transaction array for SMT value
+const hashTransactions = (transactions: TransactionEntry[]): bigint => {
+  const data = JSON.stringify(transactions);
+  return BigInt(keccak256(toBytes(data)));
 };
 
 // Initialize transaction service
@@ -69,25 +48,23 @@ export const initializeTransactionService = async (): Promise<void> => {
 
 // Load transactions from RocksDB and rebuild SMT
 const loadTransactionsFromDatabase = async (): Promise<void> => {
-  const entries = await dbGetAll('tx:');
+  const entries = await dbGetAll('txdata:');
 
   if (entries.length === 0) {
     console.log('No existing transaction data found');
     return;
   }
 
-  console.log(`Loading ${entries.length} transaction entries from database...`);
+  console.log(`Loading transaction data from database...`);
   let loadedCount = 0;
 
   for (const entry of entries) {
-    // Key format: tx:sender:receiver:token:timestamp:type (sender/receiver)
+    // Key format: txdata:sender:receiver:token:type
     const parts = entry.key.split(':');
     const sender = parts[1];
     const receiver = parts[2];
     const token = parts[3];
-    const timestamp = parseInt(parts[4]);
-    const type = parts[5]; // 'sender' or 'receiver'
-    const amount = entry.value;
+    const type = parts[4]; // 'sender' or 'receiver'
 
     const wallet = type === 'sender' ? sender : receiver;
     const userSecret = await getTxSecret(wallet);
@@ -96,24 +73,24 @@ const loadTransactionsFromDatabase = async (): Promise<void> => {
       continue;
     }
 
-    const key = type === 'sender'
-      ? generateSenderKey(sender, receiver, token, timestamp, userSecret)
-      : generateReceiverKey(sender, receiver, token, timestamp, userSecret);
+    const transactions: TransactionEntry[] = JSON.parse(entry.value);
+    const key = generateTxKey(sender, receiver, token, userSecret);
+    const valueHash = hashTransactions(transactions);
 
-    txSmt.add(key, toBigIntAmount(amount));
+    txSmt.add(key, valueHash);
     loadedCount++;
   }
 
   console.log(`Loaded ${loadedCount} transaction entries from database`);
 };
 
-// Add transaction to SMT (creates 2 leaves: one for sender, one for receiver)
+// Add transaction to SMT (updates existing array or creates new)
 export const addTransaction = async (
   sender: string,
   receiver: string,
   token: string,
   amount: string
-): Promise<{ senderKey: string; receiverKey: string; timestamp: number }> => {
+): Promise<{ timestamp: number }> => {
   const timestamp = Date.now();
 
   // Get secrets for both parties
@@ -127,28 +104,92 @@ export const addTransaction = async (
     throw new Error('Receiver has not set transaction secret');
   }
 
-  // Generate keys
-  const senderKey = generateSenderKey(sender, receiver, token, timestamp, senderSecret);
-  const receiverKey = generateReceiverKey(sender, receiver, token, timestamp, receiverSecret);
-
-  const amountBigInt = toBigIntAmount(amount);
-
-  // Add both leaves to SMT
-  txSmt.add(senderKey, amountBigInt);
-  txSmt.add(receiverKey, amountBigInt);
-
-  // Persist to RocksDB
-  const senderDbKey = `tx:${sender.toLowerCase()}:${receiver.toLowerCase()}:${token.toLowerCase()}:${timestamp}:sender`;
-  const receiverDbKey = `tx:${sender.toLowerCase()}:${receiver.toLowerCase()}:${token.toLowerCase()}:${timestamp}:receiver`;
-
-  await dbPut(senderDbKey, amount);
-  await dbPut(receiverDbKey, amount);
-
-  return {
-    senderKey: String(senderKey),
-    receiverKey: String(receiverKey),
+  const newTx: TransactionEntry = {
+    sender,
+    receiver,
+    token,
+    amount,
     timestamp
   };
+
+  // Update sender's leaf
+  await updateTxLeaf(sender, receiver, token, 'sender', senderSecret, newTx);
+
+  // Update receiver's leaf
+  await updateTxLeaf(sender, receiver, token, 'receiver', receiverSecret, newTx);
+
+  return { timestamp };
+};
+
+// Update a transaction leaf (add to array, update SMT)
+const updateTxLeaf = async (
+  sender: string,
+  receiver: string,
+  token: string,
+  type: 'sender' | 'receiver',
+  userSecret: string,
+  newTx: TransactionEntry
+): Promise<void> => {
+  const dbKey = `txdata:${sender.toLowerCase()}:${receiver.toLowerCase()}:${token.toLowerCase()}:${type}`;
+
+  // Get existing transactions
+  const existing = await dbGet(dbKey);
+  const transactions: TransactionEntry[] = existing ? JSON.parse(existing) : [];
+
+  // Add new transaction
+  transactions.push(newTx);
+
+  // Generate SMT key and value hash
+  const smtKey = generateTxKey(sender, receiver, token, userSecret);
+  const valueHash = hashTransactions(transactions);
+
+  // Update or add to SMT
+  const existingValue = txSmt.get(smtKey);
+  if (existingValue) {
+    txSmt.update(smtKey, valueHash);
+  } else {
+    txSmt.add(smtKey, valueHash);
+  }
+
+  // Persist to RocksDB
+  await dbPut(dbKey, JSON.stringify(transactions));
+};
+
+// Get transaction history for a wallet
+export const getTransactionHistory = async (wallet: string): Promise<TransactionEntry[]> => {
+  const allEntries = await dbGetAll('txdata:');
+  const walletLower = wallet.toLowerCase();
+  const history: TransactionEntry[] = [];
+
+  for (const entry of allEntries) {
+    const parts = entry.key.split(':');
+    const sender = parts[1];
+    const receiver = parts[2];
+    const type = parts[4];
+
+    // Check if this wallet is involved
+    const isSender = sender === walletLower && type === 'sender';
+    const isReceiver = receiver === walletLower && type === 'receiver';
+
+    if (isSender || isReceiver) {
+      const transactions: TransactionEntry[] = JSON.parse(entry.value);
+      history.push(...transactions);
+    }
+  }
+
+  // Sort by timestamp (newest first)
+  history.sort((a, b) => b.timestamp - a.timestamp);
+
+  // Remove duplicates (same tx appears in sender and receiver)
+  const seen = new Set<string>();
+  const unique = history.filter(tx => {
+    const key = `${tx.sender}:${tx.receiver}:${tx.token}:${tx.timestamp}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  return unique;
 };
 
 // Get transaction proof for a user
@@ -156,7 +197,6 @@ export const getTxProof = async (
   sender: string,
   receiver: string,
   token: string,
-  timestamp: number,
   forWallet: string
 ): Promise<TransactionProof> => {
   const userSecret = await getTxSecret(forWallet);
@@ -164,11 +204,7 @@ export const getTxProof = async (
     throw new Error('User has not set transaction secret');
   }
 
-  const isSender = forWallet.toLowerCase() === sender.toLowerCase();
-  const key = isSender
-    ? generateSenderKey(sender, receiver, token, timestamp, userSecret)
-    : generateReceiverKey(sender, receiver, token, timestamp, userSecret);
-
+  const key = generateTxKey(sender, receiver, token, userSecret);
   const proof = txSmt.createProof(key);
   const value = txSmt.get(key);
 
