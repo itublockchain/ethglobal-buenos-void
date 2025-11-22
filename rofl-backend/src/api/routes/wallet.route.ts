@@ -9,9 +9,9 @@ const router = Router();
 const walletService = new WalletService();
 const walletController = new WalletController(walletService);
 
-// Secret management (no JWT required - user proves ownership via signature)
-router.post('/set-balance-secret', (req, res, next) => walletController.setBalanceSecret(req, res, next));
-router.post('/set-tx-secret', (req, res, next) => walletController.setTxSecret(req, res, next));
+// Secret management (requires JWT)
+router.post('/set-balance-secret', jwtAuth, (req, res, next) => walletController.setBalanceSecret(req, res, next));
+router.post('/set-tx-secret', jwtAuth, (req, res, next) => walletController.setTxSecret(req, res, next));
 
 // Transfer (requires JWT and all secrets)
 router.post('/transfer', jwtAuth, requireAllSecrets, (req, res, next) => walletController.transfer(req, res, next));

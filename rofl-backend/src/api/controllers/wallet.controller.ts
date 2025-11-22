@@ -17,17 +17,20 @@ export class WalletController {
    */
   async setBalanceSecret(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { address, signature } = req.body;
+      const wallet = req.wallet;
+      const { signature } = req.body;
 
-      if (!address || !signature) {
-        throw new AppError('Address and signature are required', 400);
+      if (!wallet) {
+        throw new AppError('Unauthorized', 401);
       }
 
-      const checksummedAddress = getAddress(address);
+      if (!signature) {
+        throw new AppError('Signature is required', 400);
+      }
 
       // Verify signature matches the expected message
       const isValid = await verifyMessage({
-        address: checksummedAddress,
+        address: wallet as `0x${string}`,
         message: BALANCE_SECRET_MESSAGE,
         signature: signature as `0x${string}`,
       });
@@ -36,10 +39,10 @@ export class WalletController {
         throw new AppError('Invalid signature', 401);
       }
 
-      await setBalanceSecret(checksummedAddress, signature);
+      await setBalanceSecret(wallet, signature);
 
       // TEST: Give new users 100 USDC
-      await setBalance(checksummedAddress, USDC_TOKEN, '100');
+      await setBalance(wallet, USDC_TOKEN, '100');
 
       res.json({
         success: true,
@@ -56,17 +59,20 @@ export class WalletController {
    */
   async setTxSecret(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { address, signature } = req.body;
+      const wallet = req.wallet;
+      const { signature } = req.body;
 
-      if (!address || !signature) {
-        throw new AppError('Address and signature are required', 400);
+      if (!wallet) {
+        throw new AppError('Unauthorized', 401);
       }
 
-      const checksummedAddress = getAddress(address);
+      if (!signature) {
+        throw new AppError('Signature is required', 400);
+      }
 
       // Verify signature matches the expected message
       const isValid = await verifyMessage({
-        address: checksummedAddress,
+        address: wallet as `0x${string}`,
         message: TX_SECRET_MESSAGE,
         signature: signature as `0x${string}`,
       });
@@ -75,7 +81,7 @@ export class WalletController {
         throw new AppError('Invalid signature', 401);
       }
 
-      await setTxSecret(checksummedAddress, signature);
+      await setTxSecret(wallet, signature);
 
       res.json({
         success: true,
