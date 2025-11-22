@@ -8,6 +8,7 @@ import { useAccount } from "wagmi";
 import { PublicWallet } from "@/components/PublicWallet";
 import { SignMessageSection } from "@/components/SignMessageSection";
 import { WalletDashboard } from "@/components/WalletDashboard";
+import { NotificationMock } from "@/components/NotificationMock";
 import { readPersistedAuthToken } from "@/lib/sign/auth";
 
 const ACCOUNT_DATA = {
@@ -149,16 +150,18 @@ export default function Dashboard() {
           <div className="text-xl font-bold tracking-[0.2em] uppercase text-white">
             Void Wallet
           </div>
-          <PublicWallet isAppLoading={isAppLoading} />
+          <div className="flex items-center gap-4">
+            <NotificationMock />
+            <PublicWallet isAppLoading={isAppLoading} />
+          </div>
         </header>
 
         {/* Background Gradients */}
         <div className="absolute top-0 left-0 w-full h-[500px] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white/5 via-black to-black pointer-events-none" />
 
         <div
-          className={`flex-1 px-12 max-w-5xl mx-auto w-full z-10 flex flex-col ${
-            !isSigned ? "pt-20" : ""
-          }`}
+          className={`flex-1 px-12 max-w-5xl mx-auto w-full z-10 flex flex-col ${!isSigned ? "pt-20" : ""
+            }`}
         >
           {isAppLoading ? (
             <div className="space-y-6 w-full">
