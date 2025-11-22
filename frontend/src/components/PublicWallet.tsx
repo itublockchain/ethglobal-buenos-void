@@ -28,7 +28,8 @@ export function PublicWallet({ isAppLoading }: { isAppLoading: boolean }) {
   });
   const { switchChain, isPending: isSwitching } = useSwitchChain();
   const isOnMainnet = chainId === mainnet.id;
-  const avatarUrl = typeof ensAvatar === "string" ? ensAvatar : undefined;
+  const avatarUrl =
+    typeof ensAvatar === "string" ? ensAvatar : "/vitalik.png";
   const [avatarTimedOut, setAvatarTimedOut] = useState(false);
 
   useEffect(() => {
@@ -40,7 +41,7 @@ export function PublicWallet({ isAppLoading }: { isAppLoading: boolean }) {
     return () => clearTimeout(timer);
   }, [address, ensAvatar]);
 
-  const shouldShowAvatar = Boolean(avatarUrl && !avatarTimedOut);
+  const shouldShowAvatar = Boolean(avatarUrl);
   const networkButtonLabel = isSwitching
     ? "Switching..."
     : isOnMainnet
@@ -99,7 +100,7 @@ export function PublicWallet({ isAppLoading }: { isAppLoading: boolean }) {
       <Card className="relative bg-[#0A0A0A] border border-white/10 p-4 min-w-[280px]">
         {isAppLoading ? (
           <div className="flex items-center gap-4">
-            <div className="h-10 w-10 rounded-full bg-white/5 animate-pulse" />
+            <div className="h-10 w-10 rounded bg-white/5 animate-pulse" />
             <div className="space-y-2">
               <div className="h-4 w-32 bg-white/10 rounded-full animate-pulse" />
               <div className="h-3 w-16 bg-white/10 rounded-full animate-pulse" />
@@ -108,13 +109,13 @@ export function PublicWallet({ isAppLoading }: { isAppLoading: boolean }) {
         ) : (
           <>
             <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-zinc-600 to-zinc-500 p-[1px]">
-                <div className="w-full h-full rounded-full bg-black flex items-center justify-center overflow-hidden">
+              <div className="w-10 h-10 rounded bg-gradient-to-br from-zinc-600 to-zinc-500 p-[1px]">
+                <div className="w-full h-full rounded bg-black flex items-center justify-center overflow-hidden">
                   {shouldShowAvatar && (
                     <img
                       src={avatarUrl}
                       alt="Wallet avatar"
-                      className="w-full h-full object-cover rounded-full"
+                      className="w-full h-full object-cover rounded"
                     />
                   )}
                 </div>
