@@ -1,5 +1,7 @@
 import level from 'level-rocksdb';
 import { env } from '../config/env';
+import { mkdirSync, existsSync } from 'fs';
+import { dirname } from 'path';
 
 // Database path - uses persistent volume in ROFL
 const DB_PATH = env.DB_PATH;
@@ -7,6 +9,12 @@ const DB_PATH = env.DB_PATH;
 let db: ReturnType<typeof level> | null = null;
 
 export const initializeDatabase = async (): Promise<void> => {
+  // Ensure parent directory exists
+  const parentDir = dirname(DB_PATH);
+  if (!existsSync(parentDir)) {
+    mkdirSync(parentDir, { recursive: true });
+  }
+
   db = level(DB_PATH);
   console.log(`Database initialized at ${DB_PATH}`);
 };
