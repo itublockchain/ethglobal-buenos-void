@@ -1,12 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { DecryptedText } from "@/components/DecryptedText";
-import { useSignMessage } from "wagmi";
-import { readPersistedAuthToken } from "@/lib/sign/auth";
 import {
   Shield,
   Lock,
@@ -16,7 +14,6 @@ import {
   ArrowDownLeft,
   Repeat,
   CheckCircle2,
-  RefreshCw,
 } from "lucide-react";
 
 // Mock Data
@@ -77,10 +74,9 @@ const TRANSACTIONS = [
   },
 ];
 
-export default function OnboardingPage() {
+export default function DemoOnboardingPage() {
   const router = useRouter();
   const [activePart, setActivePart] = useState<1 | 2>(1);
-  // Removed selectedTokens state since we select all by default
   const [isShielding, setIsShielding] = useState(false);
   const [shielded, setShielded] = useState(false);
 
@@ -88,91 +84,40 @@ export default function OnboardingPage() {
   const [isShieldingTx, setIsShieldingTx] = useState(false);
   const [shieldedTx, setShieldedTx] = useState(false);
 
-  const { signMessageAsync } = useSignMessage();
-
-  const submitSecret = async (
-    signature: string,
-    message: string,
-    type: "balance" | "transaction"
-  ) => {
-    try {
-      const token = readPersistedAuthToken();
-      const baseUrl = process.env.NEXT_PUBLIC_VOID_API_BASE_URL;
-
-      if (!token || !baseUrl) {
-        throw new Error("Authentication or API URL missing");
-      }
-
-      const endpoint =
-        type === "balance"
-          ? "/api/wallet/set-balance-secret"
-          : "/api/wallet/set-tx-secret";
-
-      const response = await fetch(`${baseUrl}${endpoint}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          message,
-          signature,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to submit ${type} secret`);
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Secret submission failed:", error);
-      throw error;
-    }
-  };
-
   const handlePart1Next = async () => {
     setIsShielding(true);
-    const message = "Void Wallet Balances Secret";
 
-    try {
-      const signature = await signMessageAsync({ message });
+    // Demo mode: Just simulate the process without real API calls
+    await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      // Submit signature to backend
-      await submitSecret(signature, message, "balance");
-
-      setShielded(true);
-      setTimeout(() => {
-        setActivePart(2);
-      }, 750);
-    } catch (error) {
-      console.error("Failed to process step 1:", error);
+    setShielded(true);
+    setTimeout(() => {
+      setActivePart(2);
       setIsShielding(false);
-    }
+    }, 750);
   };
 
   const handlePart2Next = async () => {
     setIsShieldingTx(true);
-    const message = "Void Wallet Transactions Secret";
 
-    try {
-      const signature = await signMessageAsync({ message });
+    // Demo mode: Just simulate the process without real API calls
+    await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      // Submit signature to backend
-      await submitSecret(signature, message, "transaction");
-
-      setShieldedTx(true);
-      setTimeout(() => {
-        router.push("/");
-      }, 750);
-    } catch (error) {
-      console.error("Failed to process step 2:", error);
+    setShieldedTx(true);
+    setTimeout(() => {
+      // In demo mode, redirect to demo home page or stay here
+      alert("Demo completed! In production, this would navigate to the main app.");
       setIsShieldingTx(false);
-    }
+    }, 750);
   };
 
   return (
     <main className="min-h-screen w-full bg-black text-white flex items-center justify-center p-4 sm:p-8 relative overflow-hidden">
+      {/* Demo Mode Banner */}
+      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[9999] px-4 py-2 bg-yellow-500/20 border border-yellow-500/40 rounded-full text-yellow-200 text-xs font-medium pointer-events-none">
+        🎨 DEMO MODE - No wallet connection required
+      </div>
+
       {/* Background Ambient Effects */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] bg-blue-500/10 rounded-full blur-[120px]" />
@@ -455,3 +400,4 @@ export default function OnboardingPage() {
     </main>
   );
 }
+

@@ -180,6 +180,25 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
       setIsLoadingBalances(false);
     }
   };
+
+  const refreshTransactions = async () => {
+    try {
+      setIsLoadingTransactions(true);
+      setTransactionsError(null);
+      const apiTransactions = await fetchWalletTransactions();
+      const sortedTransactions = [...apiTransactions].sort(
+        (a, b) => Number(b.timestamp ?? 0) - Number(a.timestamp ?? 0)
+      );
+      setTransactions(sortedTransactions);
+    } catch (error) {
+      console.error("Failed to refresh transactions:", error);
+      setTransactionsError(
+        error instanceof Error ? error.message : "Failed to load transactions"
+      );
+    } finally {
+      setIsLoadingTransactions(false);
+    }
+  };
   // Calculate total USD value from backend balances
   const totalUsdFromBackend = useMemo(() => {
     // backendBalances array of objects with amount and value properties
@@ -383,7 +402,9 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
 
         <SendTokenDialog
           tokens={assetsFromBackend}
-          onSuccess={refreshBalances}
+          onSuccess={async () => {
+            await Promise.all([refreshBalances(), refreshTransactions()]);
+          }}
         />
 
         {/* Swap - Placeholder for now */}
@@ -836,72 +857,6 @@ function SendTokenDialog({
           </div>
         ) : (
           <div className="space-y-6">
-            <div className="rounded-3xl border border-white/10 bg-black/20 p-5 space-y-5">
-              <div className="flex items-center justify-between text-xs uppercase tracking-[0.4em] text-white/40">
-                <span>Send details</span>
-                <span className="text-white tracking-[0.3em]">
-                  {selectedToken?.symbol}
-                </span>
-              </div>
-
-              <div className="space-y-2">
-                <span className="text-[11px] text-white/50 tracking-[0.3em] uppercase">
-                  Recipient address
-                </span>
-                <Input
-                  placeholder="0x..."
-                  value={recipientAddress}
-                  onChange={(e) => setRecipientAddress(e.target.value)}
-                  className="bg-black/40 border-white/20 text-white placeholder:text-white/30"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <span className="text-[11px] text-white/50 tracking-[0.3em] uppercase">
-                  Amount
-                </span>
-                <Input
-                  placeholder="0.0"
-                  type="text"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  className="bg-black/40 border-white/20 text-white placeholder:text-white/30"
-                />
-                <div className="text-[11px] text-white/40">
-                  Balance: {selectedToken?.amount.toFixed(6)}{" "}
-                  {selectedToken?.symbol}
-                </div>
-                {insufficient && (
-                  <div className="text-[11px] text-red-400">
-                    Insufficient balance
-                  </div>
-                )}
-              </div>
-
-              {sendError && (
-                <div className="text-[11px] text-red-400 text-center">
-                  {sendError}
-                </div>
-              )}
-
-              {sendSuccess && (
-                <div className="text-[11px] text-emerald-400 text-center">
-                  Transfer submitted successfully!
-                </div>
-              )}
-
-              <Button
-                variant="outline"
-                className="w-full h-12 uppercase tracking-[0.3em] text-xs text-white/80 border-white/30 hover:border-white hover:bg-white hover:text-black transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                onClick={handleSendTransaction}
-                disabled={
-                  isSending || !recipientAddress || !amount || insufficient
-                }
-              >
-                {isSending ? "Sending..." : "Send Transaction"}
-              </Button>
-            </div>
-
             <div className="space-y-3">
               <div className="text-xs uppercase tracking-[0.4em] text-white/40 px-1">
                 Select token
@@ -966,6 +921,72 @@ function SendTokenDialog({
                   );
                 })}
               </div>
+            </div>
+
+            <div className="rounded-3xl border border-white/10 bg-black/20 p-5 space-y-5">
+              <div className="flex items-center justify-between text-xs uppercase tracking-[0.4em] text-white/40">
+                <span>Send details</span>
+                <span className="text-white tracking-[0.3em]">
+                  {selectedToken?.symbol}
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                <span className="text-[11px] text-white/50 tracking-[0.3em] uppercase">
+                  Recipient address
+                </span>
+                <Input
+                  placeholder="0x..."
+                  value={recipientAddress}
+                  onChange={(e) => setRecipientAddress(e.target.value)}
+                  className="bg-black/40 border-white/20 text-white placeholder:text-white/30"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <span className="text-[11px] text-white/50 tracking-[0.3em] uppercase">
+                  Amount
+                </span>
+                <Input
+                  placeholder="0.0"
+                  type="text"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="bg-black/40 border-white/20 text-white placeholder:text-white/30"
+                />
+                <div className="text-[11px] text-white/40">
+                  Balance: {selectedToken?.amount.toFixed(6)}{" "}
+                  {selectedToken?.symbol}
+                </div>
+                {insufficient && (
+                  <div className="text-[11px] text-red-400">
+                    Insufficient balance
+                  </div>
+                )}
+              </div>
+
+              {sendError && (
+                <div className="text-[11px] text-red-400 text-center">
+                  {sendError}
+                </div>
+              )}
+
+              {sendSuccess && (
+                <div className="text-[11px] text-emerald-400 text-center">
+                  Transfer submitted successfully!
+                </div>
+              )}
+
+              <Button
+                variant="outline"
+                className="w-full h-12 uppercase tracking-[0.3em] text-xs text-white/80 border-white/30 hover:border-white hover:bg-white hover:text-black transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={handleSendTransaction}
+                disabled={
+                  isSending || !recipientAddress || !amount || insufficient
+                }
+              >
+                {isSending ? "Sending..." : "Send Transaction"}
+              </Button>
             </div>
           </div>
         )}
