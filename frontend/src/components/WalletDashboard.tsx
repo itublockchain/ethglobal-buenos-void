@@ -430,11 +430,10 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`pb-4 text-sm font-medium transition-colors relative ${
-                activeTab === tab.id
+              className={`pb-4 text-sm font-medium transition-colors relative ${activeTab === tab.id
                   ? "text-white"
                   : "text-white/40 hover:text-white/60"
-              }`}
+                }`}
             >
               {tab.label}
               {activeTab === tab.id && (
@@ -509,9 +508,8 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
                       >
                         <div className="flex items-center gap-4">
                           <div
-                            className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold overflow-hidden ${
-                              !logoUrl ? "bg-white/10" : ""
-                            }`}
+                            className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold overflow-hidden ${!logoUrl ? "bg-white/10" : ""
+                              }`}
                           >
                             {logoUrl ? (
                               <img
@@ -640,17 +638,14 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
                       if (diffMins < 1) {
                         timeAgo = "Just now";
                       } else if (diffMins < 60) {
-                        timeAgo = `${diffMins} min${
-                          diffMins > 1 ? "s" : ""
-                        } ago`;
+                        timeAgo = `${diffMins} min${diffMins > 1 ? "s" : ""
+                          } ago`;
                       } else if (diffHours < 24) {
-                        timeAgo = `${diffHours} hour${
-                          diffHours > 1 ? "s" : ""
-                        } ago`;
+                        timeAgo = `${diffHours} hour${diffHours > 1 ? "s" : ""
+                          } ago`;
                       } else {
-                        timeAgo = `${diffDays} day${
-                          diffDays > 1 ? "s" : ""
-                        } ago`;
+                        timeAgo = `${diffDays} day${diffDays > 1 ? "s" : ""
+                          } ago`;
                       }
 
                       // Truncate addresses for display
@@ -840,6 +835,7 @@ function DepositDialog({
     data: approveHash,
     isPending: isApprovePending,
     error: approveError,
+    reset: resetApprove,
   } = useWriteContract();
 
   const { isLoading: isApproveConfirming, isSuccess: isApproveSuccess } =
@@ -853,6 +849,7 @@ function DepositDialog({
     data: depositHash,
     isPending: isDepositPending,
     error: depositError,
+    reset: resetDeposit,
   } = useWriteContract();
 
   const { isLoading: isDepositConfirming, isSuccess: isDepositSuccess } =
@@ -974,7 +971,12 @@ function DepositDialog({
       open={open}
       onOpenChange={(isOpen) => {
         setOpen(isOpen);
-        if (!isOpen) {
+        if (isOpen) {
+          // Reset transaction states when opening modal
+          resetApprove();
+          resetDeposit();
+          hasCalledOnSuccessRef.current = false;
+        } else {
           // Reset on close
           setTimeout(() => {
             setCurrentStep(1);
@@ -982,6 +984,8 @@ function DepositDialog({
             setDepositAmount("");
             setError(null);
             hasCalledOnSuccessRef.current = false;
+            resetApprove();
+            resetDeposit();
           }, 200);
         }
       }}
@@ -1031,8 +1035,8 @@ function DepositDialog({
                       currentStep === 1
                         ? "0%"
                         : currentStep === 2
-                        ? "50%"
-                        : "100%",
+                          ? "50%"
+                          : "100%",
                   }}
                   transition={{ duration: 0.5, ease: "circOut" }}
                 />
@@ -1048,11 +1052,10 @@ function DepositDialog({
                       className="relative z-10 flex flex-col items-center gap-2"
                     >
                       <motion.div
-                        className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-500 border backdrop-blur-md ${
-                          isActive
+                        className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-500 border backdrop-blur-md ${isActive
                             ? "bg-white text-black border-white shadow-[0_0_20px_rgba(255,255,255,0.4)]"
                             : "bg-black/40 text-white/20 border-white/10"
-                        }`}
+                          }`}
                         animate={{
                           scale: isCurrent ? 1.08 : 1,
                           y: isCurrent ? -1 : 0,
@@ -1061,15 +1064,14 @@ function DepositDialog({
                         {isCompleted ? <Check className="w-3.5 h-3.5" /> : step}
                       </motion.div>
                       <span
-                        className={`text-[9px] uppercase tracking-[0.2em] font-medium transition-colors duration-300 ${
-                          isCurrent ? "text-white" : "text-white/20"
-                        }`}
+                        className={`text-[9px] uppercase tracking-[0.2em] font-medium transition-colors duration-300 ${isCurrent ? "text-white" : "text-white/20"
+                          }`}
                       >
                         {step === 1
                           ? "Select"
                           : step === 2
-                          ? "Approve"
-                          : "Deposit"}
+                            ? "Approve"
+                            : "Deposit"}
                       </span>
                     </div>
                   );
@@ -1120,21 +1122,19 @@ function DepositDialog({
                                     : "rgba(255,255,255,0.08)",
                                 }}
                                 whileTap={{ scale: 0.99 }}
-                                className={`relative flex items-center justify-between p-4 rounded-2xl border transition-all duration-300 group ${
-                                  isSelected
+                                className={`relative flex items-center justify-between p-4 rounded-2xl border transition-all duration-300 group ${isSelected
                                     ? "bg-white/10 border-white text-white shadow-[0_0_30px_rgba(255,255,255,0.1)]"
                                     : "bg-white/5 border-white/5 text-white hover:border-white/20"
-                                }`}
+                                  }`}
                               >
                                 <div className="flex items-center gap-4">
                                   <div
-                                    className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold overflow-hidden transition-colors ${
-                                      !logoUrl
+                                    className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold overflow-hidden transition-colors ${!logoUrl
                                         ? isSelected
                                           ? "bg-white text-black"
                                           : "bg-white/10"
                                         : ""
-                                    }`}
+                                      }`}
                                   >
                                     {logoUrl ? (
                                       <img
@@ -1147,11 +1147,10 @@ function DepositDialog({
                                           const parent =
                                             e.currentTarget.parentElement!;
                                           parent.textContent = token.symbol[0];
-                                          parent.className = `w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold overflow-hidden transition-colors ${
-                                            isSelected
+                                          parent.className = `w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold overflow-hidden transition-colors ${isSelected
                                               ? "bg-white text-black"
                                               : "bg-white/10"
-                                          }`;
+                                            }`;
                                         }}
                                       />
                                     ) : (
@@ -1163,11 +1162,10 @@ function DepositDialog({
                                       {token.symbol}
                                     </div>
                                     <div
-                                      className={`text-xs font-medium ${
-                                        isSelected
+                                      className={`text-xs font-medium ${isSelected
                                           ? "text-white/60"
                                           : "text-white/40"
-                                      }`}
+                                        }`}
                                     >
                                       Balance: {token.formattedBalance}
                                     </div>
@@ -1190,11 +1188,10 @@ function DepositDialog({
                     </div>
 
                     <div
-                      className={`space-y-4 transition-all duration-500 ${
-                        selectedToken
+                      className={`space-y-4 transition-all duration-500 ${selectedToken
                           ? "opacity-100 translate-y-0"
                           : "opacity-30 translate-y-4 pointer-events-none blur-sm"
-                      }`}
+                        }`}
                     >
                       <div className="flex items-center justify-between px-1">
                         <label className="text-[10px] uppercase tracking-[0.2em] text-white/60 font-semibold">
@@ -1258,11 +1255,10 @@ function DepositDialog({
                         : "";
                       return (
                         <div
-                          className={`w-16 h-16 rounded-full border border-white/10 flex items-center justify-center backdrop-blur-md overflow-hidden ${
-                            !logoUrl
+                          className={`w-16 h-16 rounded-full border border-white/10 flex items-center justify-center backdrop-blur-md overflow-hidden ${!logoUrl
                               ? "bg-gradient-to-br from-white/10 to-transparent"
                               : ""
-                          }`}
+                            }`}
                         >
                           {logoUrl ? (
                             <img
@@ -1368,9 +1364,8 @@ function DepositDialog({
                               : "";
                             return (
                               <div
-                                className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] overflow-hidden ${
-                                  !logoUrl ? "bg-white/10" : ""
-                                }`}
+                                className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] overflow-hidden ${!logoUrl ? "bg-white/10" : ""
+                                  }`}
                               >
                                 {logoUrl ? (
                                   <img
@@ -1428,7 +1423,7 @@ function DepositDialog({
                       {approveError?.message || depositError?.message || error}
                     </motion.div>
                   )}
-                {isDepositSuccess && (
+                {isDepositSuccess && currentStep === 3 && (
                   <motion.div
                     initial={{ opacity: 0, y: 10, scale: 0.9 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -1438,7 +1433,7 @@ function DepositDialog({
                     Deposited successfully! Closing...
                   </motion.div>
                 )}
-                {isApproveSuccess && currentStep === 2 && !isDepositSuccess && (
+                {isApproveSuccess && currentStep === 2 && (
                   <motion.div
                     initial={{ opacity: 0, y: 10, scale: 0.9 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -1455,6 +1450,11 @@ function DepositDialog({
                   <Button
                     variant="ghost"
                     onClick={() => {
+                      // Reset transaction states when going back
+                      resetApprove();
+                      resetDeposit();
+                      setError(null);
+
                       if (currentStep === 2) setCurrentStep(1);
                       else if (currentStep === 3)
                         needsApproval ? setCurrentStep(2) : setCurrentStep(1);
@@ -1499,12 +1499,12 @@ function DepositDialog({
                   {currentStep === 1
                     ? "Continue"
                     : currentStep === 2
-                    ? isApprovePending || isApproveConfirming
-                      ? "Approving..."
-                      : "Approve Token"
-                    : isDepositPending || isDepositConfirming
-                    ? "Depositing..."
-                    : "Confirm Deposit"}
+                      ? isApprovePending || isApproveConfirming
+                        ? "Approving..."
+                        : "Approve Token"
+                      : isDepositPending || isDepositConfirming
+                        ? "Depositing..."
+                        : "Confirm Deposit"}
                 </Button>
               </div>
             </div>
@@ -1530,13 +1530,17 @@ function SendTokenDialog({
   const [selectedTokenId, setSelectedTokenId] = useState<string | undefined>(
     undefined
   );
+
+  // Set initial token
   useEffect(() => {
     if (!tokensWithId || tokensWithId.length === 0) return;
-    const firstWithBalance = tokensWithId.find((t) => (t.amount ?? 0) > 0);
-    setSelectedTokenId(
-      (prev) => prev ?? firstWithBalance?.id ?? tokensWithId[0].id
-    );
-  }, [tokensWithId]);
+    // Only set if not already set to avoid overriding user selection
+    if (!selectedTokenId) {
+      const firstWithBalance = tokensWithId.find((t) => (t.amount ?? 0) > 0);
+      setSelectedTokenId(firstWithBalance?.id ?? tokensWithId[0].id);
+    }
+  }, [tokensWithId, selectedTokenId]);
+
   const [open, setOpen] = useState(false);
   const [recipientAddress, setRecipientAddress] = useState("");
   const [amount, setAmount] = useState("");
@@ -1544,6 +1548,7 @@ function SendTokenDialog({
   const [sendError, setSendError] = useState<string | null>(null);
   const [sendSuccess, setSendSuccess] = useState(false);
   const { signMessageAsync } = useSignMessage();
+
   const selectedToken =
     tokensWithId.find((token) => token.id === selectedTokenId) ??
     tokensWithId[0];
@@ -1552,10 +1557,9 @@ function SendTokenDialog({
     const n = parseFloat(amount);
     return Number.isFinite(n) ? n : 0;
   })();
-  const insufficient = (selectedToken?.amount ?? 0) < parsedAmount;
 
+  const insufficient = (selectedToken?.amount ?? 0) < parsedAmount;
   const isWalletDisconnected = !address;
-  const needsNetworkSwitch = false;
 
   const handleSendTransaction = async () => {
     if (!address || !signMessageAsync) {
@@ -1649,160 +1653,227 @@ function SendTokenDialog({
           Send
         </Button>
       </DialogTrigger>
-      <DialogContent className="bg-[#050505] border border-white/10 text-white max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Send Assets</DialogTitle>
-          <DialogDescription className="text-white/60">
-            Review balances from your connected wallet.
+      <DialogContent className="bg-[#050505]/90 backdrop-blur-xl border border-white/10 text-white max-w-md p-0 gap-0 overflow-hidden shadow-2xl shadow-black/80">
+        <DialogHeader className="p-8 pb-6 border-b border-white/5">
+          <DialogTitle className="text-2xl font-light tracking-wide text-white">
+            Send Assets
+          </DialogTitle>
+          <DialogDescription className="text-white/40 text-xs uppercase tracking-widest font-medium mt-2">
+            Transfer funds to another wallet
           </DialogDescription>
         </DialogHeader>
 
         {isWalletDisconnected ? (
-          <div className="text-center text-white/60 border border-white/10 rounded-2xl py-12 text-sm">
-            Connect your wallet to view available tokens.
-          </div>
-        ) : needsNetworkSwitch ? (
-          <div className="text-center text-white/60 border border-yellow-500/40 bg-yellow-500/5 rounded-2xl py-12 text-sm">
-            Switch your wallet network to Ethereum Mainnet to load balances.
+          <div className="p-12 text-center">
+            <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center mx-auto mb-6 text-white/20 border border-white/5">
+              <ArrowRight className="w-8 h-8" />
+            </div>
+            <p className="text-white/60 text-sm font-light">
+              Please connect your wallet to continue.
+            </p>
           </div>
         ) : (
-          <div className="space-y-6">
-            <div className="space-y-3">
-              <div className="text-xs uppercase tracking-[0.4em] text-white/40 px-1">
-                Select token
-              </div>
-              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                {tokensWithId.map((token) => {
-                  const isSelected = selectedTokenId === token.id;
-                  const logoUrl = token.address
-                    ? getTokenLogoUrl(token.address)
-                    : "";
-                  return (
-                    <button
-                      key={token.id}
-                      type="button"
-                      onClick={() => setSelectedTokenId(token.id)}
-                      className={`relative flex w-full items-center justify-between gap-4 rounded-2xl border p-4 text-left transition-colors ${
-                        isSelected
-                          ? "border-white/60 bg-white/5"
-                          : "border-white/10 bg-black/20 hover:border-white/30"
-                      }`}
-                    >
-                      <div className="flex items-center gap-4">
-                        <div
-                          className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold overflow-hidden ${
-                            !logoUrl ? "bg-white/10" : ""
-                          }`}
+          <div className="flex flex-col max-h-[600px] overflow-y-auto custom-scrollbar-left p-6">
+            <div className="space-y-6">
+              {/* Token Selection */}
+              <div className="space-y-4">
+                <label className="text-[10px] uppercase tracking-[0.2em] text-white/60 font-semibold ml-1">
+                  Select Asset
+                </label>
+                <div className="grid gap-3">
+                  {tokensWithId.length === 0 ? (
+                    <div className="text-center py-10 border border-dashed border-white/10 rounded-2xl bg-white/[0.02]">
+                      <span className="text-sm text-white/40 font-light">
+                        No supported assets found
+                      </span>
+                    </div>
+                  ) : (
+                    tokensWithId.map((token) => {
+                      const isSelected = selectedTokenId === token.id;
+                      const logoUrl = token.address
+                        ? getTokenLogoUrl(token.address)
+                        : "";
+
+                      return (
+                        <motion.button
+                          key={token.id}
+                          onClick={() => setSelectedTokenId(token.id)}
+                          whileHover={{
+                            scale: 1.01,
+                            backgroundColor: isSelected
+                              ? "rgba(255,255,255,0.15)"
+                              : "rgba(255,255,255,0.08)",
+                          }}
+                          whileTap={{ scale: 0.99 }}
+                          className={`relative flex items-center justify-between p-4 rounded-2xl border transition-all duration-300 group ${isSelected
+                              ? "bg-white/10 border-white text-white shadow-[0_0_30px_rgba(255,255,255,0.1)]"
+                              : "bg-white/5 border-white/5 text-white hover:border-white/20"
+                            }`}
                         >
-                          {logoUrl ? (
-                            <img
-                              src={logoUrl}
-                              alt={token.symbol}
-                              className="w-full h-full object-contain bg-transparent"
-                              onError={(e) => {
-                                e.currentTarget.style.display = "none";
-                                const parent = e.currentTarget.parentElement!;
-                                parent.textContent = token.symbol?.[0] ?? "?";
-                                parent.className =
-                                  "w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-sm font-bold overflow-hidden";
-                              }}
-                            />
-                          ) : (
-                            token.symbol?.[0] ?? "?"
+                          <div className="flex items-center gap-4">
+                            <div
+                              className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold overflow-hidden transition-colors ${!logoUrl
+                                  ? isSelected
+                                    ? "bg-white text-black"
+                                    : "bg-white/10"
+                                  : ""
+                                }`}
+                            >
+                              {logoUrl ? (
+                                <img
+                                  src={logoUrl}
+                                  alt={token.symbol}
+                                  className="w-full h-full object-contain bg-transparent"
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = "none";
+                                    const parent =
+                                      e.currentTarget.parentElement!;
+                                    parent.textContent = token.symbol?.[0] ?? "?";
+                                    parent.className = `w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold overflow-hidden transition-colors ${isSelected
+                                        ? "bg-white text-black"
+                                        : "bg-white/10"
+                                      }`;
+                                  }}
+                                />
+                              ) : (
+                                token.symbol?.[0] ?? "?"
+                              )}
+                            </div>
+                            <div className="text-left">
+                              <div className="font-bold text-sm tracking-wide">
+                                {token.symbol}
+                              </div>
+                              <div
+                                className={`text-xs font-medium ${isSelected
+                                    ? "text-white/60"
+                                    : "text-white/40"
+                                  }`}
+                              >
+                                Balance: {token.amount.toFixed(6)}
+                              </div>
+                            </div>
+                          </div>
+                          {isSelected && (
+                            <motion.div
+                              initial={{ scale: 0 }}
+                              animate={{ scale: 1 }}
+                              className="w-6 h-6 rounded-full bg-white text-black flex items-center justify-center"
+                            >
+                              <Check className="w-3 h-3" />
+                            </motion.div>
                           )}
-                        </div>
-                        <div>
-                          <div className="font-bold text-white text-sm">
-                            {token.symbol}
-                          </div>
-                          <div className="text-xs text-white/40">
-                            {token.name}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-right min-w-[90px]">
-                        <div className="text-sm font-semibold text-white">
-                          {token.amount.toFixed(6)}
-                        </div>
-                        <div className="text-xs text-white/40">
-                          {token.symbol}
-                        </div>
-                      </div>
-                      {isSelected && (
-                        <div className="absolute top-3 right-3 text-white">
-                          <Check className="w-4 h-4" />
-                        </div>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="rounded-3xl border border-white/10 bg-black/20 p-5 space-y-5">
-              <div className="flex items-center justify-between text-xs uppercase tracking-[0.4em] text-white/40">
-                <span>Send details</span>
-                <span className="text-white tracking-[0.3em]">
-                  {selectedToken?.symbol}
-                </span>
-              </div>
-
-              <div className="space-y-2">
-                <span className="text-[11px] text-white/50 tracking-[0.3em] uppercase">
-                  Recipient address
-                </span>
-                <Input
-                  placeholder="0x..."
-                  value={recipientAddress}
-                  onChange={(e) => setRecipientAddress(e.target.value)}
-                  className="bg-black/40 border-white/20 text-white placeholder:text-white/30"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <span className="text-[11px] text-white/50 tracking-[0.3em] uppercase">
-                  Amount
-                </span>
-                <Input
-                  placeholder="0.0"
-                  type="text"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  className="bg-black/40 border-white/20 text-white placeholder:text-white/30"
-                />
-                <div className="text-[11px] text-white/40">
-                  Balance: {selectedToken?.amount.toFixed(6)}{" "}
-                  {selectedToken?.symbol}
+                        </motion.button>
+                      );
+                    })
+                  )}
                 </div>
-                {insufficient && (
-                  <div className="text-[11px] text-red-400">
-                    Insufficient balance
-                  </div>
-                )}
               </div>
 
-              {sendError && (
-                <div className="text-[11px] text-red-400 text-center">
-                  {sendError}
-                </div>
-              )}
-
-              {sendSuccess && (
-                <div className="text-[11px] text-emerald-400 text-center">
-                  Transfer submitted successfully!
-                </div>
-              )}
-
-              <Button
-                variant="outline"
-                className="w-full h-12 uppercase tracking-[0.3em] text-xs text-white/80 border-white/30 hover:border-white hover:bg-white hover:text-black transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                onClick={handleSendTransaction}
-                disabled={
-                  isSending || !recipientAddress || !amount || insufficient
-                }
+              {/* Send Details */}
+              <div
+                className={`space-y-5 transition-all duration-500 ${selectedToken
+                    ? "opacity-100 translate-y-0"
+                    : "opacity-30 translate-y-4 pointer-events-none blur-sm"
+                  }`}
               >
-                {isSending ? "Sending..." : "Send Transaction"}
-              </Button>
+                {/* Recipient Address */}
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase tracking-[0.2em] text-white/60 font-semibold ml-1">
+                    Recipient Address
+                  </label>
+                  <Input
+                    placeholder="0x..."
+                    value={recipientAddress}
+                    onChange={(e) => setRecipientAddress(e.target.value)}
+                    className="h-14 bg-black/40 border border-white/10 focus:border-white/50 focus:bg-black/60 text-sm font-light px-4 rounded-xl transition-all placeholder:text-white/20 text-white shadow-inner"
+                  />
+                </div>
+
+                {/* Amount */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between px-1">
+                    <label className="text-[10px] uppercase tracking-[0.2em] text-white/60 font-semibold">
+                      Amount
+                    </label>
+                    {selectedToken && (
+                      <button
+                        onClick={() => setAmount(selectedToken.amount.toString())}
+                        className="text-[10px] bg-white/10 hover:bg-white text-white hover:text-black px-3 py-1 rounded-full transition-all uppercase tracking-wider font-medium"
+                      >
+                        Max: {selectedToken.amount.toFixed(6)}
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="relative group">
+                    <Input
+                      placeholder="0.00"
+                      type="text"
+                      value={amount}
+                      onChange={(e) => {
+                        // Only allow numbers and decimals
+                        if (/^\d*\.?\d*$/.test(e.target.value)) {
+                          setAmount(e.target.value);
+                        }
+                      }}
+                      className="h-20 bg-black/40 border border-white/10 focus:border-white/50 focus:bg-black/60 text-4xl font-light pl-6 pr-20 rounded-2xl transition-all placeholder:text-white/20 text-white shadow-inner"
+                    />
+                    <div className="absolute right-6 top-1/2 -translate-y-1/2 text-lg font-medium text-white/30 pointer-events-none">
+                      {selectedToken?.symbol || ""}
+                    </div>
+                  </div>
+
+                  {insufficient && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="text-xs text-red-400 flex items-center gap-2 px-2"
+                    >
+                      <div className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+                      Insufficient balance
+                    </motion.div>
+                  )}
+                </div>
+
+                {/* Error/Success Messages */}
+                {sendError && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs text-center"
+                  >
+                    {sendError}
+                  </motion.div>
+                )}
+
+                {sendSuccess && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-xs text-center"
+                  >
+                    Transfer submitted successfully!
+                  </motion.div>
+                )}
+
+                {/* Send Button */}
+                <Button
+                  className="w-full h-14 bg-white text-black hover:bg-white/90 transition-all text-sm uppercase tracking-widest font-bold rounded-xl mt-4"
+                  onClick={handleSendTransaction}
+                  disabled={
+                    isSending || !recipientAddress || !amount || insufficient
+                  }
+                >
+                  {isSending ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                      Sending...
+                    </div>
+                  ) : (
+                    "Send Transaction"
+                  )}
+                </Button>
+              </div>
             </div>
           </div>
         )}
