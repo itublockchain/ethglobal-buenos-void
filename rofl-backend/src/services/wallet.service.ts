@@ -3,6 +3,8 @@ import { verifyWalletSignature } from '../utils/wallet.util';
 import { TransferRequest, TransferResult } from '../types/wallet.types';
 import { AppError } from '../api/middlewares/errorHandler';
 import { getBalance, updateBalance, getRoot } from './balance.service';
+import { addTransaction, getTxRoot } from './transaction.service';
+import { hasAllSecrets } from './secret.service';
 
 const transferSchema = z.object({
   sendTransaction: z.object({
@@ -32,25 +34,44 @@ export class WalletService {
       throw new AppError(result.error || 'Invalid signature', 401);
     }
 
+    // Check both parties have set their secrets
+    const senderHasSecrets = await hasAllSecrets(sendTransaction.from);
+    const receiverHasSecrets = await hasAllSecrets(sendTransaction.to);
+
+    if (!senderHasSecrets) {
+      throw new AppError('Sender has not set all required secrets', 400);
+    }
+    if (!receiverHasSecrets) {
+      throw new AppError('Receiver has not set all required secrets', 400);
+    }
+
     // Check sender balance (using human-readable decimals)
-    const senderBalance = getBalance(sendTransaction.from, sendTransaction.token);
+    const senderBalance = await getBalance(sendTransaction.from, sendTransaction.token);
     const amount = parseFloat(sendTransaction.amount);
     const currentBalance = parseFloat(senderBalance);
-    
+
     if (currentBalance < amount) {
       throw new AppError('Insufficient balance', 400);
     }
 
     // Execute transfer
     const newSenderBalance = (currentBalance - amount).toString();
-    const receiverBalance = getBalance(sendTransaction.to, sendTransaction.token);
+    const receiverBalance = await getBalance(sendTransaction.to, sendTransaction.token);
     const newReceiverBalance = (parseFloat(receiverBalance) + amount).toString();
 
-    // Update balances in SMT
-    updateBalance(sendTransaction.from, sendTransaction.token, newSenderBalance);
-    updateBalance(sendTransaction.to, sendTransaction.token, newReceiverBalance);
+    // Update balances in Balance SMT
+    await updateBalance(sendTransaction.from, sendTransaction.token, newSenderBalance);
+    await updateBalance(sendTransaction.to, sendTransaction.token, newReceiverBalance);
 
-    // Generate tx hash from new SMT root
+    // Add transaction to Transaction SMT (creates 2 leaves)
+    await addTransaction(
+      sendTransaction.from,
+      sendTransaction.to,
+      sendTransaction.token,
+      sendTransaction.amount
+    );
+
+    // Generate tx hash from balance SMT root
     const txHash = getRoot();
 
     return {

@@ -23,3 +23,13 @@ export interface TransferResult {
   token: string;
   amount: string;
 }
+
+export interface SetSecretRequest {
+  address: string;
+  signature: string;
+}
+
+export interface SetSecretResponse {
+  success: boolean;
+  message: string;
+}

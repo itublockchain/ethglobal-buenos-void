@@ -20,6 +20,7 @@
     "ethers": "^6.15.0",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
+    "level-rocksdb": "^5.0.0",
     "siwe": "^3.0.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",

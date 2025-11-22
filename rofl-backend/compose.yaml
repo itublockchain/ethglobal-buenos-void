@@ -4,6 +4,18 @@ services:
       context: .
       dockerfile: Dockerfile
     image: "docker.io/extypen/void-backend:latest"
+    ports:
+      - "3000:3000"
+    annotations:
+      net.oasis.proxy.ports.3000.mode: terminate-tls
     platform: linux/amd64
-    env_file:
-      - .env
+    volumes:
+      - void-volume:/root/.void-volume
+      - /run/rofl-appd.sock:/run/rofl-appd.sock
+    environment:
+      - PORT=3000
+      - JWT_SECRET=your-secret-key-change-in-production
+      - DB_PATH=/root/.void-volume/db
+
+volumes:
+  void-volume:

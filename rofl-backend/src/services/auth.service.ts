@@ -1,7 +1,8 @@
 import jwt from 'jsonwebtoken';
 import { getAddress, verifyMessage } from 'viem';
-import { LoginRequest, LoginResponse, JwtPayload } from '../types/auth.types';
+import { LoginRequest, LoginResponse, JwtPayload, MeResponse } from '../types/auth.types';
 import { AppError } from '../api/middlewares/errorHandler';
+import { hasBalanceSecret, hasTxSecret } from './secret.service';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 const JWT_EXPIRY = '7d';
@@ -48,5 +49,21 @@ export class AuthService {
     } catch (error) {
       throw new AppError('Invalid or expired token', 401);
     }
+  }
+
+  async getMe(wallet: string): Promise<MeResponse> {
+    const required_secrets: string[] = [];
+
+    const hasBalance = await hasBalanceSecret(wallet);
+    const hasTx = await hasTxSecret(wallet);
+
+    if (!hasBalance) {
+      required_secrets.push('balance');
+    }
+    if (!hasTx) {
+      required_secrets.push('transaction');
+    }
+
+    return { wallet, required_secrets };
   }
 }

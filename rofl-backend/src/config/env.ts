@@ -7,16 +7,6 @@ config();
 export const env = {
     // Server
     PORT: parseInt(process.env.PORT || '3000', 10),
-
+    JWT_SECRET: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+    DB_PATH: process.env.DB_PATH || './data/db',
 } as const;
-
-// Validate required environment variables
-export const validateEnv = (): void => {
-    const requiredEnvVars = ['DATABASE_URL', 'JWKS_ENDPOINT'];
-
-    const missingEnvVars = requiredEnvVars.filter(envVar => !env[envVar as keyof typeof env]);
-
-    if (missingEnvVars.length > 0) {
-        throw new Error(`Missing required environment variables: ${missingEnvVars.join(', ')}`);
-    }
-};

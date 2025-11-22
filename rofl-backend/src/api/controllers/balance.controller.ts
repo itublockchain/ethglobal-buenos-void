@@ -12,7 +12,7 @@ export class BalanceController {
    * Get balances for authenticated wallet
    * GET /api/balance
    */
-  getBalances(req: Request, res: Response, next: NextFunction): void {
+  async getBalances(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const wallet = req.wallet;
 
@@ -21,10 +21,12 @@ export class BalanceController {
         return;
       }
 
-      const balances = TOKENS.map((token) => ({
-        token,
-        balance: getBalance(wallet, token),
-      }));
+      const balances = await Promise.all(
+        TOKENS.map(async (token) => ({
+          token,
+          balance: await getBalance(wallet, token),
+        }))
+      );
 
       res.json({
         success: true,

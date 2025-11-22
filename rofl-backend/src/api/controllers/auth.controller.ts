@@ -43,4 +43,27 @@ export class AuthController {
       next(error);
     }
   }
+
+  /**
+   * Get current user info
+   * GET /api/auth/me
+   */
+  async getMe(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const wallet = req.wallet;
+
+      if (!wallet) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      const result = await this.authService.getMe(wallet);
+      res.json({
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
