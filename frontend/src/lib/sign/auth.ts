@@ -48,6 +48,46 @@ export const clearAuthToken = () => {
 };
 
 /**
+ * Decodes a JWT token without verification (client-side only).
+ * Returns the payload if successful, null otherwise.
+ */
+export const decodeJWT = (
+  token: string
+): { wallet?: string; iat?: number; exp?: number } | null => {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) {
+      return null;
+    }
+
+    // Decode the payload (second part)
+    const payload = parts[1];
+    const decoded = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
+    return JSON.parse(decoded);
+  } catch (error) {
+    console.error("Failed to decode JWT:", error);
+    return null;
+  }
+};
+
+/**
+ * Validates if the token's wallet address matches the connected wallet.
+ * Returns true if valid, false otherwise.
+ */
+export const validateTokenWallet = (
+  token: string,
+  connectedAddress: string
+): boolean => {
+  const payload = decodeJWT(token);
+  if (!payload || !payload.wallet) {
+    return false;
+  }
+
+  // Compare addresses (case-insensitive)
+  return payload.wallet.toLowerCase() === connectedAddress.toLowerCase();
+};
+
+/**
  * Determines whether we can skip the signature flow using an existing bearer token.
  * Currently operates in bypass mode so that backend integration can be added later.
  */

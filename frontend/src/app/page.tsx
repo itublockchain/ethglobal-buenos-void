@@ -9,7 +9,7 @@ import { PublicWallet } from "@/components/PublicWallet";
 import { SignMessageSection } from "@/components/SignMessageSection";
 import { WalletDashboard } from "@/components/WalletDashboard";
 import { NotificationMock } from "@/components/NotificationMock";
-import { readPersistedAuthToken } from "@/lib/sign/auth";
+import { readPersistedAuthToken, validateTokenWallet, clearAuthToken } from "@/lib/sign/auth";
 
 const ACCOUNT_DATA = {
   id: "1",
@@ -42,6 +42,15 @@ export default function Dashboard() {
         return;
       }
 
+      // Validate token wallet address matches connected address
+      if (address && !validateTokenWallet(token, address)) {
+        console.warn("Token wallet address does not match connected wallet. Clearing token...");
+        clearAuthToken();
+        setIsSigned(false);
+        setTimeout(() => setIsAppLoading(false), 700);
+        return;
+      }
+
       try {
         const baseUrl = process.env.NEXT_PUBLIC_VOID_API_BASE_URL;
         if (!baseUrl) throw new Error("Base URL missing");
@@ -64,10 +73,12 @@ export default function Dashboard() {
           }
         } else {
           // If token is invalid, remove it so user can sign again
+          clearAuthToken();
           setIsSigned(false);
         }
       } catch (error) {
         console.error("Auto-login failed:", error);
+        clearAuthToken();
         setIsSigned(false);
       } finally {
         setTimeout(() => setIsAppLoading(false), 700);
