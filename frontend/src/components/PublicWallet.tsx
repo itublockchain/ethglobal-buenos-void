@@ -11,7 +11,8 @@ import {
   useEnsName,
   useSwitchChain,
 } from "wagmi";
-import { sepolia } from "wagmi/chains";
+import { mainnet } from "wagmi/chains";
+import { clearAuthToken } from "@/lib/sign/auth";
 
 function truncateAddress(address?: string) {
   if (!address) return "";
@@ -26,7 +27,7 @@ export function PublicWallet({ isAppLoading }: { isAppLoading: boolean }) {
     name: ensName ?? undefined,
   });
   const { switchChain, isPending: isSwitching } = useSwitchChain();
-  const isOnSepolia = chainId === sepolia.id;
+  const isOnMainnet = chainId === mainnet.id;
   const avatarUrl = typeof ensAvatar === "string" ? ensAvatar : undefined;
   const [avatarTimedOut, setAvatarTimedOut] = useState(false);
 
@@ -42,19 +43,24 @@ export function PublicWallet({ isAppLoading }: { isAppLoading: boolean }) {
   const shouldShowAvatar = Boolean(avatarUrl && !avatarTimedOut);
   const networkButtonLabel = isSwitching
     ? "Switching..."
-    : isOnSepolia
-    ? "Sepolia"
-    : "Switch to Sepolia";
+    : isOnMainnet
+    ? "Ethereum"
+    : "Switch to Ethereum";
 
-  const networkBadgeClass = isOnSepolia
+  const networkBadgeClass = isOnMainnet
     ? "border-emerald-400/30 text-emerald-200/90 bg-emerald-400/5"
     : "border-white/30 text-white/80 bg-white/5";
 
-  const handleSwitchToSepolia = () => {
-    if (!switchChain || isOnSepolia) {
+  const handleSwitchToMainnet = () => {
+    if (!switchChain || isOnMainnet) {
       return;
     }
-    switchChain({ chainId: sepolia.id });
+    switchChain({ chainId: mainnet.id });
+  };
+
+  const handleDisconnect = () => {
+    clearAuthToken();
+    disconnect();
   };
 
   return (
@@ -63,26 +69,26 @@ export function PublicWallet({ isAppLoading }: { isAppLoading: boolean }) {
         <Button
           type="button"
           variant="outline"
-          onClick={handleSwitchToSepolia}
-          disabled={isOnSepolia || !address || isSwitching}
+          onClick={handleSwitchToMainnet}
+          disabled={isOnMainnet || !address || isSwitching}
           className={`flex flex-col items-center justify-center gap-1 rounded-none border border-white/15 bg-black/30 px-4 py-3 text-center text-white/80 hover:bg-white hover:text-black transition-all min-w-[160px] ${
-            isOnSepolia ? "cursor-default opacity-90" : "cursor-pointer"
+            isOnMainnet ? "cursor-default opacity-90" : "cursor-pointer"
           }`}
         >
           <div
             className={`flex items-center justify-center gap-1.5 text-[11px] uppercase tracking-[0.2em] ${
-              isOnSepolia ? "text-emerald-200" : "text-white/70"
+              isOnMainnet ? "text-emerald-200" : "text-white/70"
             }`}
           >
-            {isOnSepolia ? (
+            {isOnMainnet ? (
               <Sparkles className="w-3 h-3 text-emerald-300" />
             ) : (
               <Network className="w-3 h-3" />
             )}
-            {isOnSepolia ? "Sepolia" : "Switch"}
+            {isOnMainnet ? "Ethereum" : "Switch"}
           </div>
           <span className="text-[11px] text-white/50 tracking-[0.15em] text-center">
-            {isOnSepolia
+            {isOnMainnet
               ? "Connected"
               : isSwitching
               ? "Switching..."
@@ -127,7 +133,7 @@ export function PublicWallet({ isAppLoading }: { isAppLoading: boolean }) {
               type="button"
               size="icon"
               variant="ghost"
-              onClick={() => disconnect()}
+              onClick={handleDisconnect}
               className="absolute bottom-3 right-3 text-white/70 hover:text-red-400 cursor-pointer transition-colors duration-150 rounded-full border border-transparent hover:border-red-400/40 hover:bg-white/5 p-2"
             >
               <LogOut className="w-4 h-4" />

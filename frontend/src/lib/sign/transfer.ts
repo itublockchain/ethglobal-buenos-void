@@ -70,8 +70,18 @@ export async function submitTransferSignature(
   });
 
   if (!response.ok) {
-    const errorMessage =
-      (await response.text()) || "Transfer submission failed";
+    let errorMessage = "Transfer submission failed";
+    try {
+      const text = await response.text();
+      if (text) {
+        try {
+          const json = JSON.parse(text);
+          errorMessage = json?.error || json?.message || text;
+        } catch {
+          errorMessage = text;
+        }
+      }
+    } catch {}
     console.error("Backend error response:", errorMessage);
     throw new Error(errorMessage);
   }

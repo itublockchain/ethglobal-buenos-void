@@ -8,6 +8,7 @@ import { useAccount } from "wagmi";
 import { PublicWallet } from "@/components/PublicWallet";
 import { SignMessageSection } from "@/components/SignMessageSection";
 import { WalletDashboard } from "@/components/WalletDashboard";
+import { readPersistedAuthToken } from "@/lib/sign/auth";
 
 const ACCOUNT_DATA = {
   id: "1",
@@ -28,23 +29,90 @@ export default function Dashboard() {
   const [isSigned, setIsSigned] = useState(false);
 
   useEffect(() => {
-    const timer = setTimeout(() => setIsAppLoading(false), 700);
-    return () => clearTimeout(timer);
-  }, []);
+    if (!isConnected) {
+      setIsSigned(false);
+      return;
+    }
+
+    const checkAuth = async () => {
+      const token = readPersistedAuthToken();
+      if (!token) {
+        setTimeout(() => setIsAppLoading(false), 700);
+        return;
+      }
+
+      try {
+        const baseUrl = process.env.NEXT_PUBLIC_VOID_API_BASE_URL;
+        if (!baseUrl) throw new Error("Base URL missing");
+
+        const response = await fetch(`${baseUrl}/api/auth/me`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success) {
+            if (data.data?.required_secrets?.length > 0) {
+              router.push("/onboarding");
+              return;
+            } else {
+              setIsSigned(true);
+            }
+          }
+        } else {
+          // If token is invalid, remove it so user can sign again
+          setIsSigned(false);
+        }
+      } catch (error) {
+        console.error("Auto-login failed:", error);
+        setIsSigned(false);
+      } finally {
+        setTimeout(() => setIsAppLoading(false), 700);
+      }
+    };
+
+    checkAuth();
+  }, [router, isConnected, address]);
 
   // Check user profile after signing
   const handleSignSuccess = async () => {
-    setIsSigned(true);
+    setIsAppLoading(true); // Show loading while checking profile
 
     try {
-      const userProfile = await fetchUserProfile();
+      const token = readPersistedAuthToken();
+      const baseUrl = process.env.NEXT_PUBLIC_VOID_API_BASE_URL;
+
+      if (!token || !baseUrl) {
+        setIsAppLoading(false);
+        return;
+      }
+
+      const response = await fetch(`${baseUrl}/api/auth/me`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch user profile");
+      }
+
+      const data = await response.json();
 
       // If required array is not empty, redirect to onboarding
-      if (userProfile.required && userProfile.required.length > 0) {
+      if (data.success && data.data?.required_secrets?.length > 0) {
         router.push("/onboarding");
+        // Do not set isSigned to true here to prevent dashboard flash
+      } else {
+        // Only show dashboard if no required secrets
+        setIsSigned(true);
+        setIsAppLoading(false);
       }
     } catch (error) {
       console.error("Failed to fetch user profile:", error);
+      setIsAppLoading(false);
     }
   };
 

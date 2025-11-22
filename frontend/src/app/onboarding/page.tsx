@@ -5,15 +5,18 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 import { DecryptedText } from "@/components/DecryptedText";
+import { useSignMessage } from "wagmi";
+import { readPersistedAuthToken } from "@/lib/sign/auth";
 import {
   Shield,
   Lock,
-  CheckCircle2,
   ArrowRight,
-  Terminal,
   Activity,
-  Wallet,
-  Loader2,
+  ArrowUpRight,
+  ArrowDownLeft,
+  Repeat,
+  CheckCircle2,
+  RefreshCw,
 } from "lucide-react";
 
 // Mock Data
@@ -44,6 +47,36 @@ const TOKENS = [
   },
 ];
 
+const TRANSACTIONS = [
+  {
+    id: "tx1",
+    type: "Sent",
+    amount: "100.00",
+    asset: "USDC",
+    date: "2 mins ago",
+    icon: ArrowUpRight,
+    color: "text-red-400",
+  },
+  {
+    id: "tx2",
+    type: "Received",
+    amount: "0.5",
+    asset: "WETH",
+    date: "1 hour ago",
+    icon: ArrowDownLeft,
+    color: "text-green-400",
+  },
+  {
+    id: "tx3",
+    type: "Swap",
+    amount: "50 DAI → USDC",
+    asset: "DAI",
+    date: "3 hours ago",
+    icon: Repeat,
+    color: "text-blue-400",
+  },
+];
+
 export default function OnboardingPage() {
   const router = useRouter();
   const [activePart, setActivePart] = useState<1 | 2>(1);
@@ -51,44 +84,91 @@ export default function OnboardingPage() {
   const [isShielding, setIsShielding] = useState(false);
   const [shielded, setShielded] = useState(false);
 
-  // Part 2 States
-  const [verificationSteps, setVerificationSteps] = useState({
-    hashing: false,
-    proof: false,
-    relayer: false,
-  });
+  // Part 2 States (Transactions)
+  const [isShieldingTx, setIsShieldingTx] = useState(false);
+  const [shieldedTx, setShieldedTx] = useState(false);
 
-  const handlePart1Next = () => {
+  const { signMessageAsync } = useSignMessage();
+
+  const submitSecret = async (
+    signature: string,
+    message: string,
+    type: "balance" | "transaction"
+  ) => {
+    try {
+      const token = readPersistedAuthToken();
+      const baseUrl = process.env.NEXT_PUBLIC_VOID_API_BASE_URL;
+
+      if (!token || !baseUrl) {
+        throw new Error("Authentication or API URL missing");
+      }
+
+      const endpoint =
+        type === "balance"
+          ? "/api/wallet/set-balance-secret"
+          : "/api/wallet/set-tx-secret";
+
+      const response = await fetch(`${baseUrl}${endpoint}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          message,
+          signature,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to submit ${type} secret`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Secret submission failed:", error);
+      throw error;
+    }
+  };
+
+  const handlePart1Next = async () => {
     setIsShielding(true);
+    const message = "Void Wallet Balances Secret";
 
-    // Simulate shielding process
-    setTimeout(() => {
+    try {
+      const signature = await signMessageAsync({ message });
+
+      // Submit signature to backend
+      await submitSecret(signature, message, "balance");
+
       setShielded(true);
       setTimeout(() => {
         setActivePart(2);
-        startVerification();
       }, 1500);
-    }, 1000);
-  };
-
-  const startVerification = () => {
-    // Simulate sequential verification steps
-    setTimeout(
-      () => setVerificationSteps((p) => ({ ...p, hashing: true })),
-      500
-    );
-    setTimeout(
-      () => setVerificationSteps((p) => ({ ...p, proof: true })),
-      2000
-    );
-    setTimeout(
-      () => setVerificationSteps((p) => ({ ...p, relayer: true })),
-      3500
-    );
+    } catch (error) {
+      console.error("Failed to process step 1:", error);
+      setIsShielding(false);
+    }
   };
 
   const handlePart2Next = async () => {
-    router.push("/");
+    setIsShieldingTx(true);
+    const message = "Void Wallet Transactions Secret";
+
+    try {
+      const signature = await signMessageAsync({ message });
+
+      // Submit signature to backend
+      await submitSecret(signature, message, "transaction");
+
+      setShieldedTx(true);
+      setTimeout(() => {
+        router.push("/");
+      }, 1500);
+    } catch (error) {
+      console.error("Failed to process step 2:", error);
+      setIsShieldingTx(false);
+    }
   };
 
   return (
@@ -213,10 +293,20 @@ export default function OnboardingPage() {
             <div className="mt-8 flex justify-end">
               <Button
                 onClick={handlePart1Next}
-                disabled={isShielding}
-                className="h-12 px-8 bg-white text-black hover:bg-zinc-200 hover:scale-105 transition-all duration-300 font-semibold text-sm rounded-full flex items-center gap-2"
+                disabled={isShielding || shielded}
+                className={`h-12 px-8 font-semibold text-sm rounded-full flex items-center gap-2 transition-all duration-300
+                  ${
+                    shielded
+                      ? "bg-emerald-500 text-white hover:bg-emerald-600"
+                      : "bg-white text-black hover:bg-zinc-200 hover:scale-105"
+                  }`}
               >
-                {isShielding ? (
+                {shielded ? (
+                  <>
+                    Confirmed
+                    <CheckCircle2 className="w-4 h-4" />
+                  </>
+                ) : isShielding ? (
                   <>
                     <Lock className="w-4 h-4 animate-pulse" />
                     Securing...
@@ -232,7 +322,7 @@ export default function OnboardingPage() {
           </div>
         </motion.div>
 
-        {/* PART 2: Proof Generation */}
+        {/* PART 2: Hide Transactions */}
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{
@@ -241,8 +331,8 @@ export default function OnboardingPage() {
             scale: activePart === 2 ? 1 : 0.95,
             filter: activePart === 2 ? "blur(0px)" : "blur(2px)",
           }}
-          transition={{ duration: 0.5, delay: 0.2 }}
-          className={`relative border border-white/10 bg-black/40 backdrop-blur-xl p-6 sm:p-8 rounded-3xl overflow-hidden ${
+          transition={{ duration: 0.5 }}
+          className={`relative border border-white/10 bg-black/40 backdrop-blur-xl p-6 sm:p-8 rounded-3xl overflow-hidden col-start-1 lg:col-start-2 row-start-1 ${
             activePart !== 2 ? "pointer-events-none" : ""
           }`}
         >
@@ -255,126 +345,106 @@ export default function OnboardingPage() {
                 Step 2 of 2
               </div>
               <h2 className="text-3xl sm:text-4xl font-bold mb-3 tracking-tight">
-                Secure Initialization
+                Hide Your Transactions
               </h2>
               <p className="text-white/50 text-sm sm:text-base max-w-md">
-                Initializing your private state within the TEE using Sparse
-                Merkle Trees for complete privacy.
+                Encrypting your transaction history. Your past activity will be
+                hidden from public view but verifiable within the TEE.
               </p>
             </div>
 
-            {/* Terminal / Steps */}
-            <div className="flex-1 bg-black/40 rounded-xl border border-white/5 p-6 font-mono text-sm relative overflow-hidden">
-              {/* Grid background for terminal */}
-              <div
-                className="absolute inset-0 opacity-20"
-                style={{
-                  backgroundImage:
-                    "linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px)",
-                  backgroundSize: "20px 20px",
-                }}
-              />
+            {/* Transaction List */}
+            <div className="space-y-3 flex-1 min-h-[300px]">
+              <div className="flex items-center justify-between text-xs uppercase tracking-wider text-white/30 px-4">
+                <span>Activity</span>
+                <span>Time</span>
+              </div>
 
-              <div className="space-y-6 relative z-10">
-                {/* Step 1 */}
-                <div className="flex items-start gap-4">
-                  <div
-                    className={`mt-1 w-2 h-2 rounded-full ${
-                      verificationSteps.hashing
-                        ? "bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]"
-                        : "bg-white/20"
-                    }`}
-                  />
-                  <div>
-                    <div
-                      className={`font-bold ${
-                        verificationSteps.hashing
-                          ? "text-white"
-                          : "text-white/40"
-                      }`}
-                    >
-                      Verifying Signature
-                    </div>
-                    <div className="text-xs text-white/40 mt-1">
-                      {verificationSteps.hashing ? "Verified" : "Waiting..."}
-                    </div>
-                  </div>
-                </div>
+              <div className="space-y-3">
+                {TRANSACTIONS.map((tx, index) => {
+                  const isEncrypted = shieldedTx;
 
-                {/* Step 2 */}
-                <div className="flex items-start gap-4">
-                  <div
-                    className={`mt-1 w-2 h-2 rounded-full ${
-                      verificationSteps.proof
-                        ? "bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]"
-                        : "bg-white/20"
-                    }`}
-                  />
-                  <div>
-                    <div
-                      className={`font-bold ${
-                        verificationSteps.proof ? "text-white" : "text-white/40"
-                      }`}
+                  return (
+                    <motion.div
+                      key={tx.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.1 }}
+                      className={`
+                        group relative flex items-center justify-between p-4 rounded-xl border transition-all duration-300
+                        bg-white/5 border-white/20 shadow-[0_0_20px_-5px_rgba(255,255,255,0.05)]
+                      `}
                     >
-                      Updating Sparse Merkle Tree
-                    </div>
-                    <div className="text-xs text-white/40 mt-1">
-                      {verificationSteps.proof
-                        ? "Root updated"
-                        : "Calculating leaves..."}
-                    </div>
-                    {verificationSteps.hashing && !verificationSteps.proof && (
-                      <div className="mt-2 text-xs text-green-500/80 font-mono">
-                        {`> updating_leaves...`}
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-full bg-white/5 p-2 flex items-center justify-center">
+                          <tx.icon className={`w-5 h-5 ${tx.color}`} />
+                        </div>
+
+                        <div>
+                          <div className="font-bold text-sm">
+                            {isEncrypted ? (
+                              <DecryptedText
+                                text={tx.type}
+                                speed={30}
+                                className="text-white/80"
+                              />
+                            ) : (
+                              tx.type
+                            )}
+                          </div>
+                          <div className="text-xs text-white/40">
+                            {isEncrypted ? (
+                              <DecryptedText
+                                text={`${tx.amount} ${tx.asset}`}
+                                speed={50}
+                              />
+                            ) : (
+                              `${tx.amount} ${tx.asset}`
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    )}
-                  </div>
-                </div>
 
-                {/* Step 3 */}
-                <div className="flex items-start gap-4">
-                  <div
-                    className={`mt-1 w-2 h-2 rounded-full ${
-                      verificationSteps.relayer
-                        ? "bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]"
-                        : "bg-white/20"
-                    }`}
-                  />
-                  <div>
-                    <div
-                      className={`font-bold ${
-                        verificationSteps.relayer
-                          ? "text-white"
-                          : "text-white/40"
-                      }`}
-                    >
-                      TEE Attestation
-                    </div>
-                    <div className="text-xs text-white/40 mt-1">
-                      {verificationSteps.relayer
-                        ? "Secure Enclave Synced"
-                        : "Pending confirmation..."}
-                    </div>
-                  </div>
-                </div>
+                      <div className="text-right">
+                        <div className="text-xs text-white/40">
+                          {isEncrypted ? (
+                            <DecryptedText text={tx.date} speed={20} />
+                          ) : (
+                            tx.date
+                          )}
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                })}
               </div>
             </div>
 
             <div className="mt-8 flex justify-end">
               <Button
                 onClick={handlePart2Next}
-                disabled={!verificationSteps.relayer}
-                className="h-12 px-8 bg-white text-black hover:bg-zinc-200 hover:scale-105 transition-all duration-300 font-semibold text-sm rounded-full flex items-center gap-2"
+                disabled={isShieldingTx || shieldedTx}
+                className={`h-12 px-8 font-semibold text-sm rounded-full flex items-center gap-2 transition-all duration-300
+                  ${
+                    shieldedTx
+                      ? "bg-emerald-500 text-white hover:bg-emerald-600"
+                      : "bg-white text-black hover:bg-zinc-200 hover:scale-105"
+                  }`}
               >
-                {verificationSteps.relayer ? (
+                {shieldedTx ? (
                   <>
-                    Enter Void
-                    <ArrowRight className="w-4 h-4" />
+                    Confirmed
+                    <CheckCircle2 className="w-4 h-4" />
+                  </>
+                ) : isShieldingTx ? (
+                  <>
+                    <Lock className="w-4 h-4 animate-pulse" />
+                    Securing...
                   </>
                 ) : (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Processing...
+                    Enter Void
+                    <ArrowRight className="w-4 h-4" />
                   </>
                 )}
               </Button>

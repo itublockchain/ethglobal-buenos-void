@@ -9,11 +9,11 @@ export type LoginPayload = {
   signature: string;
 };
 
-const AUTH_TOKEN_STORAGE_KEY = "VOID_AUTH_TOKEN";
+export const AUTH_TOKEN_STORAGE_KEY = "VOID_AUTH_TOKEN";
 const shouldSkipSignatureWithToken =
   process.env.NEXT_PUBLIC_VOID_SKIP_SIGNATURE_WITH_TOKEN === "true";
 
-const persistAuthToken = (token?: string) => {
+export const persistAuthToken = (token?: string) => {
   if (!token || typeof window === "undefined") {
     return;
   }
@@ -24,7 +24,7 @@ const persistAuthToken = (token?: string) => {
   }
 };
 
-const readPersistedAuthToken = () => {
+export const readPersistedAuthToken = () => {
   if (typeof window === "undefined") {
     return null;
   }
@@ -33,6 +33,17 @@ const readPersistedAuthToken = () => {
   } catch (error) {
     console.error("Failed to read auth token:", error);
     return null;
+  }
+};
+
+export const clearAuthToken = () => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+  } catch (error) {
+    console.error("Failed to clear auth token:", error);
   }
 };
 

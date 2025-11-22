@@ -26,12 +26,13 @@ import {
   useSignMessage,
 } from "wagmi";
 import { erc20Abi, formatUnits, type Address } from "viem";
-import { sepolia } from "viem/chains";
+import { mainnet } from "viem/chains";
 import {
   submitTransferSignature,
   type SendTransaction,
 } from "@/lib/sign/transfer";
 import { fetchWalletBalances, type TokenBalance } from "@/lib/balance";
+import { getTokenLogoUrl } from "@/lib/utils";
 
 type SupportedToken = {
   id: string;
@@ -49,23 +50,23 @@ type TokenWithBalance = SupportedToken & {
   isBalanceLoading: boolean;
 };
 
-const SEPOLIA_TOKENS: SupportedToken[] = [
+const SUPPORTED_TOKENS: SupportedToken[] = [
   {
     id: "eth",
     symbol: "ETH",
-    name: "Sepolia Ether",
+    name: "Ether",
     type: "native",
     decimals: 18,
-    description: "Native gas token on Sepolia",
+    description: "Native token on Ethereum",
   },
   {
     id: "usdc",
     symbol: "USDC",
-    name: "Circle USDC (Testnet)",
+    name: "USD Coin",
     type: "erc20",
     decimals: 6,
-    address: "0x75Af732c6A21f3Cb6A1eD25468D66C199817f75c",
-    description: "Stablecoin test token",
+    address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+    description: "Circle USD Coin",
   },
 ];
 
@@ -74,6 +75,7 @@ interface Asset {
   name: string;
   amount: number;
   value: number;
+  address?: string;
 }
 
 interface Wallet {
@@ -104,7 +106,9 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
         setBackendBalances(data.balances);
       } catch (error) {
         console.error("Failed to fetch balances:", error);
-        setBalanceError(error instanceof Error ? error.message : "Failed to load balances");
+        setBalanceError(
+          error instanceof Error ? error.message : "Failed to load balances"
+        );
       } finally {
         setIsLoadingBalances(false);
       }
@@ -113,12 +117,80 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
     loadBalances();
   }, []);
 
+  const refreshBalances = async () => {
+    try {
+      setIsLoadingBalances(true);
+      setBalanceError(null);
+      const data = await fetchWalletBalances();
+      setBackendBalances(data.balances);
+    } catch (error) {
+      console.error("Failed to refresh balances:", error);
+      setBalanceError(
+        error instanceof Error ? error.message : "Failed to load balances"
+      );
+    } finally {
+      setIsLoadingBalances(false);
+    }
+  };
   // Calculate total USD value from backend balances
   const totalUsdFromBackend = useMemo(() => {
-    // TODO: You'll need price data to calculate USD value
-    // For now, return the wallet.totalUsd as fallback
-    return wallet.totalUsd;
-  }, [backendBalances, wallet.totalUsd]);
+    // backendBalances array of objects with amount and value properties
+    const calculatedTotal = backendBalances.reduce((acc, balance) => {
+      const balanceValue = parseFloat(balance.balance);
+      let amount = 0;
+      if (!isNaN(balanceValue)) {
+        amount = balanceValue;
+      }
+
+      // Mock pricing for demo purposes
+      const isEth =
+        balance.token === "0x0000000000000000000000000000000000000000";
+      const price = isEth ? 1800 : 1;
+      return acc + amount * price;
+    }, 0);
+
+    return calculatedTotal;
+  }, [backendBalances]);
+
+  // Fetch token metadata (symbol, name) for unknown tokens
+  const unknownTokens = useMemo(() => {
+    return backendBalances
+      .filter(
+        (b) =>
+          b.token !== "0x0000000000000000000000000000000000000000" &&
+          !SUPPORTED_TOKENS.some(
+            (t) => t.address?.toLowerCase() === b.token.toLowerCase()
+          )
+      )
+      .map((b) => b.token as Address);
+  }, [backendBalances]);
+
+  const { data: tokenMetadata } = useReadContracts({
+    contracts: unknownTokens.flatMap((address) => [
+      {
+        address,
+        abi: erc20Abi,
+        functionName: "symbol",
+        chainId: mainnet.id,
+      },
+      {
+        address,
+        abi: erc20Abi,
+        functionName: "name",
+        chainId: mainnet.id,
+      },
+      {
+        address,
+        abi: erc20Abi,
+        functionName: "decimals",
+        chainId: mainnet.id,
+      },
+    ]),
+    query: {
+      enabled: unknownTokens.length > 0,
+      staleTime: Infinity,
+    },
+  });
 
   // Convert backend balances to Asset format for display
   const assetsFromBackend = useMemo(() => {
@@ -127,18 +199,67 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
     }
 
     return backendBalances.map((balance) => {
-      const amount = parseFloat(balance.balance) / Math.pow(10, balance.decimals);
+      // Find matching token info from SUPPORTED_TOKENS
+      // If balance.token is "0x00...00", it's ETH
+      const isEth =
+        balance.token === "0x0000000000000000000000000000000000000000";
+      const matchingToken = SUPPORTED_TOKENS.find(
+        (t) =>
+          (isEth && t.symbol === "ETH") ||
+          t.address?.toLowerCase() === balance.token.toLowerCase()
+      );
+
+      // Try to find metadata from useReadContracts
+      let onChainSymbol: string | undefined;
+      let onChainName: string | undefined;
+      let onChainDecimals: number | undefined;
+
+      if (!isEth && !matchingToken) {
+        const index = unknownTokens.indexOf(balance.token as Address);
+        if (index !== -1) {
+          // Each token has 3 calls (symbol, name, decimals)
+          const baseIndex = index * 3;
+          onChainSymbol = tokenMetadata?.[baseIndex]?.result as string;
+          onChainName = tokenMetadata?.[baseIndex + 1]?.result as string;
+          onChainDecimals = tokenMetadata?.[baseIndex + 2]
+            ?.result as unknown as number;
+        }
+      }
+
+      // backend balance.balance is string, parse it safely
+      // If we have onChainDecimals, we should use it to format the raw balance if needed
+      // But for now assuming backend returns formatted or simple string number
+      const balanceValue = parseFloat(balance.balance);
+
+      let amount = 0;
+      if (!isNaN(balanceValue)) {
+        amount = balanceValue;
+      }
+
+      const symbol =
+        matchingToken?.symbol || onChainSymbol || balance.symbol || "UNKNOWN";
+
+      const name =
+        matchingToken?.name ||
+        onChainName ||
+        (symbol === "ETH" ? "Ether" : symbol) ||
+        "Unknown Token";
+
       // TODO: Calculate USD value with real price data
-      const value = amount * (balance.symbol === "ETH" ? 1800 : 1); // Mock prices
-      
+      const value = amount * (symbol === "ETH" ? 1800 : 1); // Mock prices
+
+      // Get actual backend token address
+      const tokenAddress = balance.token;
+
       return {
-        symbol: balance.symbol,
-        name: balance.symbol === "ETH" ? "Ether" : balance.symbol,
+        symbol,
+        name,
         amount,
         value,
+        address: tokenAddress,
       };
     });
-  }, [backendBalances, wallet.assets]);
+  }, [backendBalances, wallet.assets, tokenMetadata, unknownTokens]);
 
   return (
     <>
@@ -155,7 +276,7 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
         </h2>
         <div className="text-7xl font-bold tracking-tighter text-white font-mono">
           $
-          {wallet.totalUsd.toLocaleString("en-US", {
+          {totalUsdFromBackend.toLocaleString("en-US", {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
           })}
@@ -212,7 +333,10 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
           </DialogContent>
         </Dialog>
 
-        <SendTokenDialog />
+        <SendTokenDialog
+          tokens={assetsFromBackend}
+          onSuccess={refreshBalances}
+        />
 
         {/* Swap - Placeholder for now */}
         <Button
@@ -300,6 +424,10 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
                     const portfolioPercentage =
                       (asset.value / totalUsdFromBackend) * 100;
 
+                    const logoUrl = asset.address
+                      ? getTokenLogoUrl(asset.address)
+                      : "";
+
                     return (
                       <motion.div
                         key={asset.symbol}
@@ -309,8 +437,22 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
                         className="flex items-center justify-between p-4 bg-[#0A0A0A] border border-white/5 hover:border-white/10 transition-colors group cursor-pointer"
                       >
                         <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-sm font-bold">
-                            {asset.symbol[0]}
+                          <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-sm font-bold overflow-hidden">
+                            {logoUrl ? (
+                              <img
+                                src={logoUrl}
+                                alt={asset.symbol}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  // If image fails to load, hide it and show fallback
+                                  e.currentTarget.style.display = "none";
+                                  e.currentTarget.parentElement!.innerText =
+                                    asset.symbol?.[0] ?? "?";
+                                }}
+                              />
+                            ) : (
+                              asset.symbol?.[0] ?? "?"
+                            )}
                           </div>
                           <div>
                             <div className="font-bold text-white text-sm">
@@ -365,101 +507,46 @@ function formatTokenBalance(value: bigint, decimals: number) {
   });
 }
 
-function SendTokenDialog() {
-  const { address, chainId } = useAccount();
-  const [selectedTokenId, setSelectedTokenId] = useState(SEPOLIA_TOKENS[0].id);
+function SendTokenDialog({
+  tokens,
+  onSuccess,
+}: {
+  tokens: Asset[];
+  onSuccess?: () => Promise<void> | void;
+}) {
+  const { address } = useAccount();
+  const tokensWithId = useMemo(
+    () => tokens.map((t) => ({ ...t, id: t.address ?? t.symbol })),
+    [tokens]
+  );
+  const [selectedTokenId, setSelectedTokenId] = useState<string | undefined>(
+    undefined
+  );
+  useEffect(() => {
+    if (!tokensWithId || tokensWithId.length === 0) return;
+    const firstWithBalance = tokensWithId.find((t) => (t.amount ?? 0) > 0);
+    setSelectedTokenId(
+      (prev) => prev ?? firstWithBalance?.id ?? tokensWithId[0].id
+    );
+  }, [tokensWithId]);
   const [recipientAddress, setRecipientAddress] = useState("");
   const [amount, setAmount] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [sendSuccess, setSendSuccess] = useState(false);
   const { signMessageAsync } = useSignMessage();
-  const isOnSepolia = chainId === sepolia.id;
-  const erc20Tokens = useMemo(
-    () => SEPOLIA_TOKENS.filter((token) => token.type === "erc20"),
-    []
-  );
-
-  const { data: nativeBalance, isLoading: isNativeLoading } = useBalance({
-    address,
-    chainId: sepolia.id,
-    query: {
-      enabled: Boolean(address && isOnSepolia),
-      refetchInterval: 15_000,
-    },
-  });
-
-  const { data: erc20BalancesData, isLoading: isErc20Loading } =
-    useReadContracts({
-      contracts:
-        address && isOnSepolia
-          ? erc20Tokens.map((token) => ({
-              address: token.address!,
-              abi: erc20Abi,
-              functionName: "balanceOf",
-              args: [address],
-              chainId: sepolia.id,
-            }))
-          : [],
-      query: {
-        enabled: Boolean(address && isOnSepolia && erc20Tokens.length),
-        refetchInterval: 20_000,
-      },
-    });
-
-  const tokenBalances: TokenWithBalance[] = useMemo(() => {
-    return SEPOLIA_TOKENS.map((token) => {
-      if (!address || !isOnSepolia) {
-        return {
-          ...token,
-          balanceRaw: 0n,
-          formattedBalance: "0",
-          isBalanceLoading: false,
-        };
-      }
-
-      if (token.type === "native") {
-        const raw = nativeBalance?.value ?? 0n;
-        return {
-          ...token,
-          balanceRaw: raw,
-          formattedBalance: formatTokenBalance(raw, token.decimals),
-          isBalanceLoading: isNativeLoading,
-        };
-      }
-
-      const erc20Index = erc20Tokens.findIndex(
-        (erc20Token) => erc20Token.id === token.id
-      );
-      const erc20Result = erc20BalancesData?.[erc20Index];
-      const raw =
-        erc20Result && erc20Result.status === "success"
-          ? ((erc20Result.result ?? 0n) as bigint)
-          : 0n;
-
-      return {
-        ...token,
-        balanceRaw: raw,
-        formattedBalance: formatTokenBalance(raw, token.decimals),
-        isBalanceLoading: isErc20Loading || !erc20Result,
-      };
-    });
-  }, [
-    address,
-    erc20BalancesData,
-    erc20Tokens,
-    isErc20Loading,
-    isNativeLoading,
-    isOnSepolia,
-    nativeBalance?.value,
-  ]);
-
   const selectedToken =
-    tokenBalances.find((token) => token.id === selectedTokenId) ??
-    tokenBalances[0];
+    tokensWithId.find((token) => token.id === selectedTokenId) ??
+    tokensWithId[0];
+
+  const parsedAmount = (() => {
+    const n = parseFloat(amount);
+    return Number.isFinite(n) ? n : 0;
+  })();
+  const insufficient = (selectedToken?.amount ?? 0) < parsedAmount;
 
   const isWalletDisconnected = !address;
-  const needsNetworkSwitch = Boolean(address && !isOnSepolia);
+  const needsNetworkSwitch = false;
 
   const handleSendTransaction = async () => {
     if (!address || !signMessageAsync) {
@@ -493,7 +580,8 @@ function SendTokenDialog() {
         from: address,
         to: recipientAddress,
         token:
-          selectedToken.address || "0x0000000000000000000000000000000000000000",
+          selectedToken?.address ||
+          "0x0000000000000000000000000000000000000000",
         amount: amount,
       };
 
@@ -510,6 +598,11 @@ function SendTokenDialog() {
         setSendSuccess(true);
         setRecipientAddress("");
         setAmount("");
+        try {
+          await onSuccess?.();
+        } catch (e) {
+          console.error("Post-transfer refresh failed:", e);
+        }
       } else {
         setSendError(result.message || "Transfer failed");
       }
@@ -555,69 +648,10 @@ function SendTokenDialog() {
           </div>
         ) : needsNetworkSwitch ? (
           <div className="text-center text-white/60 border border-yellow-500/40 bg-yellow-500/5 rounded-2xl py-12 text-sm">
-            Switch your wallet network to Sepolia to load balances.
+            Switch your wallet network to Ethereum Mainnet to load balances.
           </div>
         ) : (
           <div className="space-y-6">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between text-xs uppercase tracking-[0.4em] text-white/40 px-1">
-                <span>Available tokens</span>
-                <span className="text-[10px] text-white/50 tracking-[0.3em]">
-                  Live balance
-                </span>
-              </div>
-              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                {tokenBalances.map((token) => {
-                  const isSelected = selectedTokenId === token.id;
-                  return (
-                    <button
-                      key={token.id}
-                      type="button"
-                      onClick={() => setSelectedTokenId(token.id)}
-                      className={`relative flex w-full items-center justify-between gap-4 rounded-2xl border p-4 text-left transition-colors ${
-                        isSelected
-                          ? "border-white/60 bg-white/5"
-                          : "border-white/10 bg-black/20 hover:border-white/30"
-                      }`}
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-sm font-bold">
-                          {token.symbol[0]}
-                        </div>
-                        <div>
-                          <div className="font-bold text-white text-sm">
-                            {token.symbol}
-                          </div>
-                          <div className="text-xs text-white/40">
-                            {token.description}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-right min-w-[90px]">
-                        {token.isBalanceLoading ? (
-                          <div className="h-4 w-20 bg-white/10 rounded-full animate-pulse ml-auto" />
-                        ) : (
-                          <>
-                            <div className="text-sm font-semibold text-white">
-                              {token.formattedBalance}
-                            </div>
-                            <div className="text-xs text-white/40">
-                              {token.symbol}
-                            </div>
-                          </>
-                        )}
-                      </div>
-                      {isSelected && (
-                        <div className="absolute top-3 right-3 text-white">
-                          <Check className="w-4 h-4" />
-                        </div>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
             <div className="rounded-3xl border border-white/10 bg-black/20 p-5 space-y-5">
               <div className="flex items-center justify-between text-xs uppercase tracking-[0.4em] text-white/40">
                 <span>Send details</span>
@@ -650,9 +684,14 @@ function SendTokenDialog() {
                   className="bg-black/40 border-white/20 text-white placeholder:text-white/30"
                 />
                 <div className="text-[11px] text-white/40">
-                  Balance: {selectedToken?.formattedBalance}{" "}
+                  Balance: {selectedToken?.amount.toFixed(6)}{" "}
                   {selectedToken?.symbol}
                 </div>
+                {insufficient && (
+                  <div className="text-[11px] text-red-400">
+                    Insufficient balance
+                  </div>
+                )}
               </div>
 
               {sendError && (
@@ -671,10 +710,78 @@ function SendTokenDialog() {
                 variant="outline"
                 className="w-full h-12 uppercase tracking-[0.3em] text-xs text-white/80 border-white/30 hover:border-white hover:bg-white hover:text-black transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={handleSendTransaction}
-                disabled={isSending || !recipientAddress || !amount}
+                disabled={
+                  isSending || !recipientAddress || !amount || insufficient
+                }
               >
                 {isSending ? "Sending..." : "Send Transaction"}
               </Button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="text-xs uppercase tracking-[0.4em] text-white/40 px-1">
+                Select token
+              </div>
+              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                {tokensWithId.map((token) => {
+                  const isSelected = selectedTokenId === token.id;
+                  const logoUrl = token.address
+                    ? getTokenLogoUrl(token.address)
+                    : "";
+                  return (
+                    <button
+                      key={token.id}
+                      type="button"
+                      onClick={() => setSelectedTokenId(token.id)}
+                      className={`relative flex w-full items-center justify-between gap-4 rounded-2xl border p-4 text-left transition-colors ${
+                        isSelected
+                          ? "border-white/60 bg-white/5"
+                          : "border-white/10 bg-black/20 hover:border-white/30"
+                      }`}
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-sm font-bold overflow-hidden">
+                          {logoUrl ? (
+                            <img
+                              src={logoUrl}
+                              alt={token.symbol}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                e.currentTarget.style.display = "none";
+                                e.currentTarget.parentElement!.textContent =
+                                  token.symbol?.[0] ?? "?";
+                              }}
+                            />
+                          ) : (
+                            token.symbol?.[0] ?? "?"
+                          )}
+                        </div>
+                        <div>
+                          <div className="font-bold text-white text-sm">
+                            {token.symbol}
+                          </div>
+                          <div className="text-xs text-white/40">
+                            {token.name}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right min-w-[90px]">
+                        <div className="text-sm font-semibold text-white">
+                          {token.amount.toFixed(6)}
+                        </div>
+                        <div className="text-xs text-white/40">
+                          {token.symbol}
+                        </div>
+                      </div>
+                      {isSelected && (
+                        <div className="absolute top-3 right-3 text-white">
+                          <Check className="w-4 h-4" />
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}

@@ -60,6 +60,13 @@ export async function fetchWalletBalances(): Promise<BalanceResponse> {
   const data = await response.json();
 
   console.log("fetchWalletBalances data:", data);
+  
+  // Map the backend response structure to expected frontend structure if needed
+  // Backend returns { success: true, data: { balances: [...] } } or { balances: [...] }
+  // Adjust based on actual backend response
+  if (data.data && data.data.balances) {
+      return data.data;
+  }
 
   return data;
 }
