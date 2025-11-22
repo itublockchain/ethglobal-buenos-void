@@ -24,9 +24,11 @@ import {
   useBalance,
   useReadContracts,
   useSignMessage,
+  useWriteContract,
+  useWaitForTransactionReceipt,
 } from "wagmi";
-import { erc20Abi, formatUnits, type Address } from "viem";
-import { mainnet } from "viem/chains";
+import { erc20Abi, formatUnits, parseUnits, type Address } from "viem";
+import { baseSepolia } from "viem/chains";
 import {
   submitTransferSignature,
   type SendTransaction,
@@ -61,7 +63,7 @@ const SUPPORTED_TOKENS: SupportedToken[] = [
     name: "Ether",
     type: "native",
     decimals: 18,
-    description: "Native token on Ethereum",
+    description: "Native token on Base Sepolia",
   },
   {
     id: "usdc",
@@ -69,10 +71,28 @@ const SUPPORTED_TOKENS: SupportedToken[] = [
     name: "USD Coin",
     type: "erc20",
     decimals: 6,
-    address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-    description: "Circle USD Coin",
+    address: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+    description: "Circle USD Coin on Base Sepolia",
   },
 ];
+
+// Void Contract Address on Base Sepolia
+const VOID_CONTRACT_ADDRESS =
+  "0x017669FB1b0d1A4ec1BaA8a9D6c62fdbf3E3c58a" as Address;
+
+// Void Contract ABI - sadece ihtiyacımız olan fonksiyonlar
+const VOID_CONTRACT_ABI = [
+  {
+    inputs: [
+      { internalType: "uint256", name: "amount", type: "uint256" },
+      { internalType: "address", name: "tokenAddress", type: "address" },
+    ],
+    name: "deposit",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+] as const;
 
 interface Asset {
   symbol: string;
@@ -238,19 +258,19 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
         address,
         abi: erc20Abi,
         functionName: "symbol",
-        chainId: mainnet.id,
+        chainId: baseSepolia.id,
       },
       {
         address,
         abi: erc20Abi,
         functionName: "name",
-        chainId: mainnet.id,
+        chainId: baseSepolia.id,
       },
       {
         address,
         abi: erc20Abi,
         functionName: "decimals",
-        chainId: mainnet.id,
+        chainId: baseSepolia.id,
       },
     ]),
     query: {
@@ -353,28 +373,7 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
       {/* Action Buttons */}
       <div className="grid grid-cols-4 gap-4 mb-16">
         {/* Deposit */}
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button
-              variant="outline"
-              className="h-14 border-white/10 bg-white/5 hover:bg-white hover:text-black hover:border-white transition-all text-base uppercase tracking-wider font-medium group"
-            >
-              <ArrowDownLeft className="mr-2 w-4 h-4 group-hover:scale-110 transition-transform" />
-              Deposit
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="bg-[#0A0A0A] border-white/10 text-white">
-            <DialogHeader>
-              <DialogTitle>Deposit Funds</DialogTitle>
-              <DialogDescription className="text-white/60">
-                Add funds to your Void Wallet account.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="py-6 text-center text-white/40 text-sm">
-              Deposit functionality coming soon.
-            </div>
-          </DialogContent>
-        </Dialog>
+        <DepositDialog />
 
         {/* Withdraw */}
         <Dialog>
@@ -712,6 +711,584 @@ function formatTokenBalance(value: bigint, decimals: number) {
   });
 }
 
+function DepositDialog() {
+  const { address } = useAccount();
+  const [open, setOpen] = useState(false);
+  const [currentStep, setCurrentStep] = useState(1);
+  const [selectedTokenAddress, setSelectedTokenAddress] = useState<
+    Address | undefined
+  >();
+  const [depositAmount, setDepositAmount] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  // Public wallet token balances (connected wallet)
+  const { data: ethBalance } = useBalance({
+    address,
+    chainId: baseSepolia.id,
+  });
+
+  // ERC20 token balances from connected wallet
+  const erc20TokenAddresses = SUPPORTED_TOKENS.filter(
+    (t) => t.type === "erc20"
+  ).map((t) => t.address!);
+
+  const { data: erc20Balances } = useReadContracts({
+    contracts: erc20TokenAddresses.flatMap((tokenAddress) => [
+      {
+        address: tokenAddress,
+        abi: erc20Abi,
+        functionName: "balanceOf",
+        args: [address!],
+        chainId: baseSepolia.id,
+      },
+      {
+        address: tokenAddress,
+        abi: erc20Abi,
+        functionName: "symbol",
+        chainId: baseSepolia.id,
+      },
+      {
+        address: tokenAddress,
+        abi: erc20Abi,
+        functionName: "decimals",
+        chainId: baseSepolia.id,
+      },
+      {
+        address: tokenAddress,
+        abi: erc20Abi,
+        functionName: "allowance",
+        args: [address!, VOID_CONTRACT_ADDRESS],
+        chainId: baseSepolia.id,
+      },
+    ]),
+    query: {
+      enabled: !!address && erc20TokenAddresses.length > 0,
+    },
+  });
+
+  // Parse ERC20 balances
+  const publicWalletTokens = useMemo(() => {
+    const tokens: Array<{
+      address: Address;
+      symbol: string;
+      decimals: number;
+      balance: bigint;
+      formattedBalance: string;
+      allowance: bigint;
+    }> = [];
+
+    if (erc20Balances) {
+      for (let i = 0; i < erc20TokenAddresses.length; i++) {
+        const baseIndex = i * 4;
+        const balanceResult = erc20Balances[baseIndex];
+        const symbolResult = erc20Balances[baseIndex + 1];
+        const decimalsResult = erc20Balances[baseIndex + 2];
+        const allowanceResult = erc20Balances[baseIndex + 3];
+
+        if (
+          balanceResult?.status === "success" &&
+          symbolResult?.status === "success" &&
+          decimalsResult?.status === "success" &&
+          allowanceResult?.status === "success"
+        ) {
+          const balance = balanceResult.result as bigint;
+          const decimals = decimalsResult.result as number;
+          const allowance = allowanceResult.result as bigint;
+
+          tokens.push({
+            address: erc20TokenAddresses[i],
+            symbol: symbolResult.result as string,
+            decimals,
+            balance,
+            formattedBalance: formatTokenBalance(balance, decimals),
+            allowance,
+          });
+        }
+      }
+    }
+
+    return tokens;
+  }, [erc20Balances, erc20TokenAddresses]);
+
+  const selectedToken = publicWalletTokens.find(
+    (t) => t.address === selectedTokenAddress
+  );
+
+  // Approve transaction
+  const {
+    writeContract: writeApprove,
+    data: approveHash,
+    isPending: isApprovePending,
+    error: approveError,
+  } = useWriteContract();
+
+  const { isLoading: isApproveConfirming, isSuccess: isApproveSuccess } =
+    useWaitForTransactionReceipt({
+      hash: approveHash,
+    });
+
+  // Deposit transaction
+  const {
+    writeContract: writeDeposit,
+    data: depositHash,
+    isPending: isDepositPending,
+    error: depositError,
+  } = useWriteContract();
+
+  const { isLoading: isDepositConfirming, isSuccess: isDepositSuccess } =
+    useWaitForTransactionReceipt({
+      hash: depositHash,
+    });
+
+  // Handle approve success - move to step 3
+  useEffect(() => {
+    if (isApproveSuccess && currentStep === 2) {
+      setCurrentStep(3);
+      setError(null);
+    }
+  }, [isApproveSuccess, currentStep]);
+
+  // Handle deposit success - close modal
+  useEffect(() => {
+    if (isDepositSuccess && currentStep === 3) {
+      setTimeout(() => {
+        setOpen(false);
+        // Reset state
+        setCurrentStep(1);
+        setSelectedTokenAddress(undefined);
+        setDepositAmount("");
+        setError(null);
+      }, 2000);
+    }
+  }, [isDepositSuccess, currentStep]);
+
+  // Handle approve
+  const handleApprove = async () => {
+    if (!selectedToken || !depositAmount) {
+      setError("Lütfen token ve miktar seçin");
+      return;
+    }
+
+    try {
+      setError(null);
+      const amountInWei = parseUnits(depositAmount, selectedToken.decimals);
+
+      writeApprove({
+        address: selectedToken.address,
+        abi: erc20Abi,
+        functionName: "approve",
+        args: [VOID_CONTRACT_ADDRESS, amountInWei],
+        chainId: baseSepolia.id,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Approve başarısız");
+    }
+  };
+
+  // Handle deposit
+  const handleDeposit = async () => {
+    if (!selectedToken || !depositAmount) {
+      setError("Lütfen token ve miktar seçin");
+      return;
+    }
+
+    try {
+      setError(null);
+      const amountInWei = parseUnits(depositAmount, selectedToken.decimals);
+
+      writeDeposit({
+        address: VOID_CONTRACT_ADDRESS,
+        abi: VOID_CONTRACT_ABI,
+        functionName: "deposit",
+        args: [amountInWei, selectedToken.address],
+        chainId: baseSepolia.id,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Deposit başarısız");
+    }
+  };
+
+  const parsedAmount = useMemo(() => {
+    const n = parseFloat(depositAmount);
+    return Number.isFinite(n) ? n : 0;
+  }, [depositAmount]);
+
+  const parsedBalance = useMemo(() => {
+    if (!selectedToken) return 0;
+    return parseFloat(
+      formatUnits(selectedToken.balance, selectedToken.decimals)
+    );
+  }, [selectedToken]);
+
+  const isInsufficientBalance = parsedAmount > parsedBalance;
+
+  // Check if user needs to approve more
+  const needsApproval = useMemo(() => {
+    if (!selectedToken || !depositAmount) return false;
+    try {
+      const amountInWei = parseUnits(depositAmount, selectedToken.decimals);
+      return selectedToken.allowance < amountInWei;
+    } catch {
+      return false;
+    }
+  }, [selectedToken, depositAmount]);
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(isOpen) => {
+        setOpen(isOpen);
+        if (!isOpen) {
+          // Reset on close
+          setTimeout(() => {
+            setCurrentStep(1);
+            setSelectedTokenAddress(undefined);
+            setDepositAmount("");
+            setError(null);
+          }, 200);
+        }
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button
+          variant="outline"
+          className="h-14 border-white/10 bg-white/5 hover:bg-white hover:text-black hover:border-white transition-all text-base uppercase tracking-wider font-medium group"
+        >
+          <ArrowDownLeft className="mr-2 w-4 h-4 group-hover:scale-110 transition-transform" />
+          Deposit
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="bg-[#050505] border border-white/10 text-white max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Deposit Funds</DialogTitle>
+          <DialogDescription className="text-white/60">
+            Void Wallet&apos;a ERC20 token yatırın.
+          </DialogDescription>
+        </DialogHeader>
+
+        {!address ? (
+          <div className="text-center text-white/60 border border-white/10 rounded-2xl py-12 text-sm">
+            Lütfen cüzdanınızı bağlayın.
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {/* Progress Steps */}
+            <div className="flex items-center justify-between">
+              {[1, 2, 3].map((step) => (
+                <div key={step} className="flex items-center flex-1">
+                  <div
+                    className={`flex items-center justify-center w-8 h-8 rounded-full border-2 text-sm font-bold transition-all ${
+                      currentStep >= step
+                        ? "border-white bg-white text-black"
+                        : "border-white/20 text-white/40"
+                    }`}
+                  >
+                    {step === 2 && isApproveSuccess ? (
+                      <Check className="w-4 h-4" />
+                    ) : step === 3 && isDepositSuccess ? (
+                      <Check className="w-4 h-4" />
+                    ) : (
+                      step
+                    )}
+                  </div>
+                  {step < 3 && (
+                    <div
+                      className={`flex-1 h-0.5 mx-2 transition-all ${
+                        currentStep > step ? "bg-white" : "bg-white/20"
+                      }`}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-between text-xs text-white/40 -mt-2">
+              <span>Token Seç</span>
+              <span>Onayla</span>
+              <span>Yatır</span>
+            </div>
+
+            {/* Step 1: Select Token & Amount */}
+            {currentStep === 1 && (
+              <div className="space-y-4">
+                <div className="text-sm font-medium text-white">
+                  1. ERC20 Token Seçin
+                </div>
+                <div className="text-xs text-white/60 mb-4">
+                  Public Wallet&apos;taki bakiyeleriniz:
+                </div>
+
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {publicWalletTokens.length === 0 ? (
+                    <div className="text-center text-white/40 py-8 text-sm border border-white/10 rounded-2xl">
+                      Public wallet&apos;ta ERC20 token bulunamadı.
+                    </div>
+                  ) : (
+                    publicWalletTokens.map((token) => {
+                      const isSelected = selectedTokenAddress === token.address;
+                      const logoUrl = getTokenLogoUrl(token.address);
+
+                      return (
+                        <button
+                          key={token.address}
+                          type="button"
+                          onClick={() => setSelectedTokenAddress(token.address)}
+                          className={`relative flex w-full items-center justify-between gap-4 rounded-2xl border p-4 text-left transition-colors ${
+                            isSelected
+                              ? "border-white/60 bg-white/5"
+                              : "border-white/10 bg-black/20 hover:border-white/30"
+                          }`}
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-sm font-bold overflow-hidden">
+                              {logoUrl ? (
+                                <img
+                                  src={logoUrl}
+                                  alt={token.symbol}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = "none";
+                                    e.currentTarget.parentElement!.textContent =
+                                      token.symbol[0];
+                                  }}
+                                />
+                              ) : (
+                                token.symbol[0]
+                              )}
+                            </div>
+                            <div>
+                              <div className="font-bold text-white text-sm">
+                                {token.symbol}
+                              </div>
+                              <div className="text-xs text-white/40">
+                                Bakiye: {token.formattedBalance}
+                              </div>
+                            </div>
+                          </div>
+                          {isSelected && (
+                            <Check className="w-5 h-5 text-white" />
+                          )}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+
+                {selectedToken && (
+                  <div className="space-y-2 pt-4">
+                    <span className="text-[11px] text-white/50 tracking-[0.3em] uppercase">
+                      Miktar
+                    </span>
+                    <Input
+                      placeholder="0.0"
+                      type="text"
+                      value={depositAmount}
+                      onChange={(e) => setDepositAmount(e.target.value)}
+                      className="bg-black/40 border-white/20 text-white placeholder:text-white/30"
+                    />
+                    <div className="text-[11px] text-white/40">
+                      Mevcut: {selectedToken.formattedBalance}{" "}
+                      {selectedToken.symbol}
+                    </div>
+                    {isInsufficientBalance && depositAmount && (
+                      <div className="text-[11px] text-red-400">
+                        Yetersiz bakiye
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <Button
+                  variant="outline"
+                  className="w-full h-12 uppercase tracking-[0.3em] text-xs text-white/80 border-white/30 hover:border-white hover:bg-white hover:text-black transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={() => {
+                    if (needsApproval) {
+                      setCurrentStep(2);
+                    } else {
+                      setCurrentStep(3);
+                    }
+                  }}
+                  disabled={
+                    !selectedToken ||
+                    !depositAmount ||
+                    isInsufficientBalance ||
+                    parsedAmount <= 0
+                  }
+                >
+                  Devam Et
+                </Button>
+              </div>
+            )}
+
+            {/* Step 2: Approve */}
+            {currentStep === 2 && (
+              <div className="space-y-4">
+                <div className="text-sm font-medium text-white">
+                  2. ERC20 Token Onayı
+                </div>
+                <div className="text-xs text-white/60 mb-4">
+                  Void Contract&apos;ın tokenlarınızı harcamasına izin verin.
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-black/20 p-6 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-white/60">Token:</span>
+                    <span className="text-sm font-bold text-white">
+                      {selectedToken?.symbol}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-white/60">Miktar:</span>
+                    <span className="text-sm font-bold text-white">
+                      {depositAmount} {selectedToken?.symbol}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-white/60">Contract:</span>
+                    <span className="text-xs font-mono text-white/80">
+                      {VOID_CONTRACT_ADDRESS.slice(0, 10)}...
+                      {VOID_CONTRACT_ADDRESS.slice(-8)}
+                    </span>
+                  </div>
+                </div>
+
+                {approveError && (
+                  <div className="text-xs text-red-400 text-center">
+                    {approveError.message}
+                  </div>
+                )}
+
+                {error && (
+                  <div className="text-xs text-red-400 text-center">
+                    {error}
+                  </div>
+                )}
+
+                {isApproveSuccess && (
+                  <div className="text-xs text-emerald-400 text-center">
+                    ✓ Onay başarılı! Bir sonraki adıma geçiliyor...
+                  </div>
+                )}
+
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    className="flex-1 h-12 uppercase tracking-[0.3em] text-xs text-white/60 border-white/20 hover:border-white/40 hover:bg-white/5 transition-all"
+                    onClick={() => setCurrentStep(1)}
+                    disabled={isApprovePending || isApproveConfirming}
+                  >
+                    Geri
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1 h-12 uppercase tracking-[0.3em] text-xs text-white/80 border-white/30 hover:border-white hover:bg-white hover:text-black transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={handleApprove}
+                    disabled={
+                      isApprovePending ||
+                      isApproveConfirming ||
+                      isApproveSuccess
+                    }
+                  >
+                    {isApprovePending || isApproveConfirming
+                      ? "Onaylanıyor..."
+                      : isApproveSuccess
+                      ? "Onaylandı ✓"
+                      : "Onayla"}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 3: Deposit */}
+            {currentStep === 3 && (
+              <div className="space-y-4">
+                <div className="text-sm font-medium text-white">
+                  3. Token Yatırma
+                </div>
+                <div className="text-xs text-white/60 mb-4">
+                  Tokenlarınızı Void Wallet&apos;a yatırın.
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-black/20 p-6 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-white/60">Token:</span>
+                    <span className="text-sm font-bold text-white">
+                      {selectedToken?.symbol}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-white/60">Miktar:</span>
+                    <span className="text-sm font-bold text-white">
+                      {depositAmount} {selectedToken?.symbol}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-white/60">Hedef:</span>
+                    <span className="text-xs font-mono text-white/80">
+                      Void Wallet Contract
+                    </span>
+                  </div>
+                </div>
+
+                {depositError && (
+                  <div className="text-xs text-red-400 text-center">
+                    {depositError.message}
+                  </div>
+                )}
+
+                {error && (
+                  <div className="text-xs text-red-400 text-center">
+                    {error}
+                  </div>
+                )}
+
+                {isDepositSuccess && (
+                  <div className="text-xs text-emerald-400 text-center">
+                    ✓ Yatırma işlemi başarılı! Modal kapatılıyor...
+                  </div>
+                )}
+
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    className="flex-1 h-12 uppercase tracking-[0.3em] text-xs text-white/60 border-white/20 hover:border-white/40 hover:bg-white/5 transition-all"
+                    onClick={() => {
+                      if (needsApproval) {
+                        setCurrentStep(2);
+                      } else {
+                        setCurrentStep(1);
+                      }
+                    }}
+                    disabled={isDepositPending || isDepositConfirming}
+                  >
+                    Geri
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1 h-12 uppercase tracking-[0.3em] text-xs text-white/80 border-white/30 hover:border-white hover:bg-white hover:text-black transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={handleDeposit}
+                    disabled={
+                      isDepositPending ||
+                      isDepositConfirming ||
+                      isDepositSuccess
+                    }
+                  >
+                    {isDepositPending || isDepositConfirming
+                      ? "Yatırılıyor..."
+                      : isDepositSuccess
+                      ? "Yatırıldı ✓"
+                      : "Yatır"}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function SendTokenDialog({
   tokens,
   onSuccess,
@@ -734,6 +1311,7 @@ function SendTokenDialog({
       (prev) => prev ?? firstWithBalance?.id ?? tokensWithId[0].id
     );
   }, [tokensWithId]);
+  const [open, setOpen] = useState(false);
   const [recipientAddress, setRecipientAddress] = useState("");
   const [amount, setAmount] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -808,6 +1386,10 @@ function SendTokenDialog({
         } catch (e) {
           console.error("Post-transfer refresh failed:", e);
         }
+        // Close modal after successful transfer
+        setTimeout(() => {
+          setOpen(false);
+        }, 1000);
       } else {
         setSendError(result.message || "Transfer failed");
       }
@@ -820,8 +1402,10 @@ function SendTokenDialog({
 
   return (
     <Dialog
-      onOpenChange={(open) => {
-        if (open) {
+      open={open}
+      onOpenChange={(isOpen) => {
+        setOpen(isOpen);
+        if (isOpen) {
           // Reset form when dialog opens
           setRecipientAddress("");
           setAmount("");

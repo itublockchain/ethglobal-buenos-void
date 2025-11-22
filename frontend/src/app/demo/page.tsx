@@ -5,7 +5,7 @@ import { WalletDashboard } from "@/components/WalletDashboard";
 
 const DEMO_ACCOUNT_DATA = {
   id: "demo-1",
-  name: "Void Wallet Demo",
+  name: "Void Wallet Demo - Base Sepolia",
   address: "0xD62E688A272f19e60E826f746bE26a41F2475A32",
   totalUsd: 2971.16,
   assets: [
@@ -14,7 +14,7 @@ const DEMO_ACCOUNT_DATA = {
       name: "USD Coin",
       amount: 23.242,
       value: 23.24,
-      address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      address: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
     },
     {
       symbol: "ROSE",
@@ -24,11 +24,11 @@ const DEMO_ACCOUNT_DATA = {
       address: "0x0000000000000000000000000000000000000001",
     },
     {
-      symbol: "WETH",
-      name: "Wrapped Ether",
+      symbol: "ETH",
+      name: "Ether",
       amount: 1.504,
       value: 2707.34,
-      address: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      address: "0x0000000000000000000000000000000000000000",
     },
   ],
 };
@@ -66,4 +66,3 @@ export default function DemoDashboard() {
     </main>
   );
 }
-

@@ -71,10 +71,10 @@ const initializeMockData = (): void => {
     '0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B',
   ];
 
-  // Mock tokens
+  // Mock tokens (Base Sepolia)
   const tokens = [
-    '0x0000000000000000000000000000000000000000', // Native token
-    '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+    '0x0000000000000000000000000000000000000000', // Native token (ETH)
+    '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // USDC on Base Sepolia
   ];
 
   // Set initial balances (human-readable decimals)
