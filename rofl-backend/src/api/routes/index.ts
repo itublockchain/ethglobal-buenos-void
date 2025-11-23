@@ -4,6 +4,7 @@ import walletRouter from './wallet.route';
 import balanceRouter from './balance.route';
 import transactionRouter from './transaction.route';
 import webhookRouter from './webhook.route';
+import roflRouter from './rofl.route';
 
 export const createRouter = (): Router => {
     const router = Router();
@@ -13,6 +14,7 @@ export const createRouter = (): Router => {
     router.use('/balance', balanceRouter);
     router.use('/transactions', transactionRouter);
     router.use('/webhook', webhookRouter);
+    router.use('/rofl', roflRouter);
 
     return router;
 };

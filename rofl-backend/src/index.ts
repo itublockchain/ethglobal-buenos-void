@@ -7,8 +7,10 @@ import cors from 'cors';
 import { initializeBalanceService } from './services/balance.service';
 import { initializeTransactionService } from './services/transaction.service';
 import { initializeDatabase, closeDatabase } from './services/db.service';
+import { initializeRoflWallet } from './services/rofl.service';
 import { createApiRouter } from './api';
 import { errorHandler } from './api/middlewares/errorHandler';
+import { env } from './config/env';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -41,6 +43,11 @@ const start = async () => {
   // Initialize services (load from DB)
   await initializeBalanceService();
   await initializeTransactionService();
+
+  // Initialize ROFL wallet
+  if (env.IS_TEE === 'true') {
+    await initializeRoflWallet();
+  }
 
   const server = app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);

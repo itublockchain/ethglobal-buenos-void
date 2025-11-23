@@ -16,6 +16,8 @@ services:
       - PORT=3000
       - JWT_SECRET=your-secret-key-change-in-production
       - DB_PATH=/root/.void-volume/db
+      - IS_TEE=true
+      - VOID_CONTRACT_ADDRESS=0xf975849d035a69682cE8802FEFD88Aa35bff9b0D
 
 volumes:
   void-volume:

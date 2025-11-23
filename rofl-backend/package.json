@@ -13,8 +13,9 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "@types/express": "^5.0.5",
     "@cedoor/smt": "^0.1.7",
+    "@oasisprotocol/rofl-client": "^0.1.2",
+    "@types/express": "^5.0.5",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "ethers": "^6.15.0",

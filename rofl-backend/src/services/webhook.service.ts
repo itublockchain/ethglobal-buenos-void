@@ -1,6 +1,7 @@
 import { createHmac } from 'crypto';
 import { env } from '../config/env';
 import { setBalance, getBalance, updateBalance } from './balance.service';
+import { addTransaction } from './transaction.service';
 import { hasBalanceSecret } from './secret.service';
 import { decodeEventLog, createPublicClient, http, erc20Abi } from 'viem';
 import { baseSepolia } from 'viem/chains';
@@ -128,6 +129,9 @@ const processLog = async (log: any): Promise<void> => {
 
     // Update balance
     await updateBalance(user, tokenAddress, newBalance);
+
+    // Add to transaction history
+    await addTransaction(env.VOID_CONTRACT_ADDRESS, user, tokenAddress, amountDecimal.toString());
 
     console.log(`Deposit processed: ${user} now has ${newBalance} of ${tokenAddress}`);
   } catch (error) {
