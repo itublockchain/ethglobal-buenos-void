@@ -163,29 +163,20 @@ export function SignMessageSection({
               {/* Glow effect */}
               <div className="absolute inset-0 bg-white/10 blur-2xl rounded-full scale-150 group-hover:bg-white/20 transition-all duration-500" />
 
-              {/* Lock container */}
-              <div className="relative w-24 h-24 rounded-2xl bg-gradient-to-br from-white/10 to-white/[0.02] border border-white/20 flex items-center justify-center backdrop-blur-sm shadow-[0_0_40px_rgba(255,255,255,0.1)] group-hover:shadow-[0_0_60px_rgba(255,255,255,0.2)] transition-all duration-500">
-                {/* Lock icon */}
-                <svg
-                  className="w-12 h-12 text-white/90 group-hover:scale-110 transition-transform duration-300"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={1.5}
-                    d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                  />
-                </svg>
-
-                {/* Scanning line effect */}
-                <div className="absolute inset-0 overflow-hidden rounded-2xl">
-                  <div className="absolute w-full h-[2px] bg-gradient-to-r from-transparent via-white/40 to-transparent animate-[scan_3s_ease-in-out_infinite]"
-                    style={{ top: '50%' }} />
-                </div>
-              </div>
+              {/* Lock icon */}
+              <svg
+                className="w-12 h-12 text-white/90 group-hover:scale-110 transition-transform duration-300 relative z-10"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                />
+              </svg>
             </div>
           </div>
 

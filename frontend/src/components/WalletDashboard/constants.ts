@@ -71,4 +71,47 @@ export const VOID_CONTRACT_ABI = [
     stateMutability: "nonpayable",
     type: "function",
   },
+  {
+    inputs: [],
+    name: "TeeDown",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        components: [
+          { internalType: "bytes32", name: "stateRoot", type: "bytes32" },
+          { internalType: "uint256", name: "term", type: "uint256" },
+          { internalType: "bytes32", name: "signature", type: "bytes32" },
+        ],
+        internalType: "struct Void.StateRootInfo",
+        name: "root",
+        type: "tuple",
+      },
+    ],
+    name: "challangeLastRoot",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        components: [
+          { internalType: "bytes32", name: "stateRoot", type: "bytes32" },
+          { internalType: "uint256", name: "term", type: "uint256" },
+          { internalType: "bytes32", name: "signature", type: "bytes32" },
+        ],
+        internalType: "struct Void.StateRootInfo",
+        name: "root",
+        type: "tuple",
+      },
+    ],
+    name: "SetState",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
 ] as const;

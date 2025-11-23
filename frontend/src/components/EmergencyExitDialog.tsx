@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { AlertTriangle, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -23,26 +22,34 @@ import { parseUnits, type Address } from "viem";
 import { baseSepolia } from "viem/chains";
 import { concat, getBytes, keccak256 } from "ethers";
 import { getLatestTransactionProof } from "@/lib/emergency-withdraw";
+import { BalanceProof } from "@/lib/balance";
 import {
   VOID_CONTRACT_ADDRESS,
   VOID_CONTRACT_ABI,
 } from "@/components/WalletDashboard/constants";
 import { Asset } from "@/components/WalletDashboard/types";
 import { TokenSelector } from "@/components/WalletDashboard/ui/TokenSelector";
-import { fetchWalletBalances } from "@/lib/balance";
 
 interface EmergencyExitDialogProps {
   tokens: Asset[];
   onSuccess?: () => Promise<void> | void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 export function EmergencyExitDialog({
   tokens,
   onSuccess,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
 }: EmergencyExitDialogProps) {
   const { address } = useAccount();
   const { signMessageAsync } = useSignMessage();
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+
+  // Use controlled state if provided, otherwise use internal state
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+  const setOpen = controlledOnOpenChange || setInternalOpen;
   const [selectedTokenAddress, setSelectedTokenAddress] = useState<
     Address | undefined
   >();
@@ -51,7 +58,7 @@ export function EmergencyExitDialog({
   const [signature, setSignature] = useState<string | null>(null);
   const [isSigning, setIsSigning] = useState(false);
   const [nonce, setNonce] = useState<string | null>(null);
-  const [proof, setProof] = useState<string[] | null>(null);
+  const [proof, setProof] = useState<BalanceProof | null>(null);
   const hasCalledOnSuccessRef = useRef(false);
   const onSuccessRef = useRef(onSuccess);
 
@@ -64,15 +71,50 @@ export function EmergencyExitDialog({
     (t) => t.address?.toLowerCase() === selectedTokenAddress?.toLowerCase()
   );
 
-  // Load proof from localStorage when dialog opens
+  // Load proof from localStorage when dialog opens or token changes
   useEffect(() => {
     if (open) {
-      const latestProof = getLatestTransactionProof();
-      if (latestProof) {
-        setProof(latestProof);
+      // Clear error when dialog opens
+      setError(null);
+      if (selectedTokenAddress) {
+        // Get the actual token address (handle native token)
+        const tokenAddress =
+          selectedTokenAddress === "0x0000000000000000000000000000000000000000"
+            ? "0x0000000000000000000000000000000000000000"
+            : selectedTokenAddress;
+
+        console.log(
+          `🚀 [Emergency Exit] Loading proof for token: ${tokenAddress}`
+        );
+        console.log(
+          `🔍 [Emergency Exit] Selected token address: ${selectedTokenAddress}`
+        );
+
+        const latestProof = getLatestTransactionProof(tokenAddress);
+
+        // Accept proof even if siblings array is empty - the contract might handle it
+        if (latestProof !== null) {
+          console.log(
+            `✅ [Emergency Exit] Proof loaded successfully with ${
+              latestProof.siblings?.length || 0
+            } siblings`
+          );
+          setProof(latestProof);
+          // Clear any previous error when proof is loaded successfully
+          setError(null);
+        } else {
+          console.log(
+            `❌ [Emergency Exit] No proof found for token: ${tokenAddress}`
+          );
+          setProof(null);
+        }
+      } else {
+        // If dialog is open but no token selected, clear proof
+        console.log(`⚠️ [Emergency Exit] Dialog open but no token selected`);
+        setProof(null);
       }
     }
-  }, [open]);
+  }, [open, selectedTokenAddress]);
 
   // Write contract for emergency withdraw
   const {
@@ -99,7 +141,7 @@ export function EmergencyExitDialog({
       setIsSigning(true);
       setError(null);
 
-      const message = "Reveal my public key";
+      const message = "Void Wallet Balances Secret";
       const signedMessage = await signMessageAsync({ message });
 
       // Slice first 130 characters as per user's code
@@ -158,8 +200,11 @@ export function EmergencyExitDialog({
         nonceBytes32 = `0x${padded}` as `0x${string}`;
       }
 
+      // Get siblings array from proof object
+      const proofSiblings = proof.siblings || [];
+
       // Ensure proof siblings are in bytes32 format
-      const proofBytes32: `0x${string}`[] = proof.map((sibling) => {
+      const proofBytes32: `0x${string}`[] = proofSiblings.map((sibling) => {
         if (typeof sibling !== "string") {
           throw new Error("Proof sibling must be a string");
         }
@@ -265,23 +310,31 @@ export function EmergencyExitDialog({
       parseFloat(withdrawAmount) > 0 &&
       signature &&
       nonce &&
-      proof &&
-      proof.length > 0
+      proof !== null
     );
   }, [selectedToken, withdrawAmount, signature, nonce, proof]);
 
   const maxAmount = selectedToken?.amount || 0;
 
+  // Automatically set amount to maximum when token is selected
+  useEffect(() => {
+    if (selectedToken && maxAmount > 0) {
+      setWithdrawAmount(maxAmount.toString());
+    }
+  }, [selectedToken, maxAmount]);
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button
-          variant="outline"
-          className="h-10 px-4 text-sm uppercase tracking-wider text-white hover:bg-zinc-900 hover:cursor-pointer border border-white/20"
-        >
-          Emergency Exit
-        </Button>
-      </DialogTrigger>
+      {controlledOpen === undefined && (
+        <DialogTrigger asChild>
+          <Button
+            variant="outline"
+            className="h-10 px-4 text-sm uppercase tracking-wider text-white hover:bg-zinc-900 hover:cursor-pointer border border-white/20"
+          >
+            Emergency Exit
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-[500px] bg-black border-white/10 text-white">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -308,44 +361,26 @@ export function EmergencyExitDialog({
                 logo: token.logo,
               }))}
               selectedTokenAddress={selectedTokenAddress}
-              onSelect={(address) =>
-                setSelectedTokenAddress(address as Address)
-              }
+              onSelect={(address) => {
+                setSelectedTokenAddress(address as Address);
+                // Clear error when token is selected
+                setError(null);
+              }}
             />
-          </div>
-
-          {/* Amount Input */}
-          {selectedToken && (
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-white/80">
-                Amount
-              </label>
-              <div className="relative">
-                <Input
-                  type="number"
-                  placeholder="0.0"
-                  value={withdrawAmount}
-                  onChange={(e) => setWithdrawAmount(e.target.value)}
-                  className="bg-white/5 border-white/10 text-white pr-20"
-                  step="any"
-                  min="0"
-                  max={maxAmount.toString()}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 h-7 px-2 text-xs text-white/60 hover:text-white"
-                  onClick={() => setWithdrawAmount(maxAmount.toString())}
-                >
-                  MAX
-                </Button>
+            {selectedToken && (
+              <div className="mt-3">
+                <p className="text-sm text-white/80">
+                  Amount:{" "}
+                  <span className="font-medium text-white">
+                    {maxAmount.toLocaleString()} {selectedToken.symbol}
+                  </span>
+                </p>
+                <p className="text-xs text-white/60 italic mt-1">
+                  Amount automatically set to maximum for emergency withdrawal
+                </p>
               </div>
-              <p className="text-xs text-white/40">
-                Available: {maxAmount.toLocaleString()} {selectedToken.symbol}
-              </p>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Sign Message Section */}
           <div className="space-y-2">
@@ -380,11 +415,12 @@ export function EmergencyExitDialog({
             <label className="text-sm font-medium text-white/80">
               Step 2: Proof Status
             </label>
-            {proof && proof.length > 0 ? (
+            {proof !== null ? (
               <div className="flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/20 rounded-md">
                 <Check className="w-4 h-4 text-green-500" />
                 <span className="text-sm text-green-500">
-                  Proof loaded from localStorage ({proof.length} siblings)
+                  Proof loaded from localStorage ({proof.siblings?.length || 0}{" "}
+                  siblings)
                 </span>
               </div>
             ) : (

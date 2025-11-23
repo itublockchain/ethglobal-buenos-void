@@ -22,6 +22,9 @@ export default async function RootLayout({
 
   return (
     <html lang="en" className="dark">
+      <head>
+        <link rel="icon" href="/favicon.ico" />
+      </head>
       <body className={inter.className}>
         <ContextProvider cookies={cookies}>{children}</ContextProvider>
       </body>

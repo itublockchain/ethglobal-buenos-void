@@ -12,7 +12,7 @@ interface TransactionRowProps {
 }
 
 export const TransactionRow: React.FC<TransactionRowProps> = ({ tx, tokenBalances }) => {
-    const isOutgoing = tx.type === "sent" || tx.type === "deposit";
+    const isOutgoing = tx.type === "sent" || tx.type === "withdraw";
     const Icon = isOutgoing ? ArrowUpRight : ArrowDownLeft;
     const iconColor = isOutgoing ? "text-red-400" : "text-green-400";
 

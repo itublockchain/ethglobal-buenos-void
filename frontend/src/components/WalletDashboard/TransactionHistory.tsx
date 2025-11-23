@@ -2,7 +2,7 @@ import { motion } from "framer-motion";
 import { ArrowDownLeft, ArrowUpRight, Copy, Check } from "lucide-react";
 import { WalletTransaction } from "@/lib/transactions";
 import { TokenBalance } from "@/lib/balance";
-import { SUPPORTED_TOKENS } from "./constants";
+import { SUPPORTED_TOKENS, VOID_CONTRACT_ADDRESS } from "./constants";
 import { useState, useEffect } from "react";
 
 interface TransactionHistoryProps {
@@ -98,15 +98,31 @@ export function TransactionHistory({
             {!isLoading && !error && hasTransactions && (
                 <div className="space-y-2">
                     {transactions.map((tx, i) => {
-                        const isOutgoing = tx.type === "sent" || tx.type === "deposit";
-                        const Icon = isOutgoing ? ArrowUpRight : ArrowDownLeft;
-                        const iconColor = isOutgoing ? "text-red-400" : "text-green-400";
+                        // Check if transaction involves the contract address
+                        const isContractReceiver = tx.receiver?.toLowerCase() === VOID_CONTRACT_ADDRESS?.toLowerCase();
+                        const isContractSender = tx.sender?.toLowerCase() === VOID_CONTRACT_ADDRESS?.toLowerCase();
 
                         let typeLabel = "Unknown";
-                        if (tx.type === "sent") typeLabel = "Sent";
+                        // Priority: Check contract address first to determine deposit/withdraw
+                        // If sender is contract, it's a deposit (money going into the wallet from contract)
+                        if (isContractSender) {
+                            typeLabel = "Deposit";
+                        }
+                        // If receiver is contract, it's a withdraw (money going out of the wallet to contract)
+                        else if (isContractReceiver) {
+                            typeLabel = "Withdraw";
+                        }
+                        // Otherwise use the original type
+                        else if (tx.type === "sent") typeLabel = "Sent";
                         else if (tx.type === "received") typeLabel = "Received";
                         else if (tx.type === "deposit") typeLabel = "Deposit";
                         else if (tx.type === "withdraw") typeLabel = "Withdraw";
+
+                        // Determine if transaction is outgoing based on typeLabel
+                        // Deposit is incoming (money into wallet), Withdraw is outgoing (money out of wallet)
+                        const isOutgoing = typeLabel === "Withdraw" || typeLabel === "Sent";
+                        const Icon = isOutgoing ? ArrowUpRight : ArrowDownLeft;
+                        const iconColor = isOutgoing ? "text-red-400" : "text-green-400";
 
                         // Find token info
                         const tokenInfo = tokenBalances.find(
