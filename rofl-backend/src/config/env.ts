@@ -11,5 +11,5 @@ export const env = {
     IS_TEE: process.env.IS_TEE || 'false',
     // Alchemy Webhook
     ALCHEMY_SIGNING_KEY: process.env.ALCHEMY_SIGNING_KEY || '',
-    VOID_CONTRACT_ADDRESS: process.env.VOID_CONTRACT_ADDRESS || '0xf975849d035a69682cE8802FEFD88Aa35bff9b0D',
+    VOID_CONTRACT_ADDRESS: process.env.VOID_CONTRACT_ADDRESS || '0x4aE649044CC818A00fA20266aE5d5b77E79089C3',
 } as const;
