@@ -346,7 +346,7 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
           ].map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
+              onClick={() => setActiveTab(tab.id as "tokens" | "history")}
               className={`pb-4 text-sm font-medium transition-colors relative ${
                 activeTab === tab.id
                   ? "text-white"

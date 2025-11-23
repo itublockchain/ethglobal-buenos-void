@@ -93,8 +93,10 @@ export function DepositDialog({
   // Handle approve success - move to step 3
   useEffect(() => {
     if (isApproveSuccess && currentStep === 2) {
-      setCurrentStep(3);
-      setError(null);
+      setTimeout(() => {
+        setCurrentStep(3);
+        setError(null);
+      }, 0);
     }
   }, [isApproveSuccess, currentStep]);
 
@@ -646,7 +648,7 @@ export function DepositDialog({
                 )}
 
                 <Button
-                  className="flex-1 h-12 bg-white text-black hover:bg-white/90 hover:scale-[1.02] active:scale-[0.98] transition-all uppercase tracking-[0.2em] text-xs font-bold disabled:opacity-50 disabled:hover:scale-100 rounded-xl shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:shadow-[0_0_30px_rgba(255,255,255,0.3)] disabled:bg-white/10 disabled:text-white/20 disabled:shadow-none"
+                  className="flex-1 h-12 bg-white text-black hover:bg-white/90 hover:scale-[1.02] active:scale-[0.98] transition-all uppercase tracking-[0.2em] text-xs font-bold disabled:opacity-50 disabled:hover:scale-100 rounded-none shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:shadow-[0_0_30px_rgba(255,255,255,0.3)] disabled:bg-white/10 disabled:text-white/20 disabled:shadow-none"
                   onClick={() => {
                     if (currentStep === 1) {
                       if (needsApproval) setCurrentStep(2);

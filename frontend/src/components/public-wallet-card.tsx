@@ -26,7 +26,9 @@ export function PublicWalletCard({
   const [avatarTimedOut, setAvatarTimedOut] = useState(false);
 
   useEffect(() => {
-    setAvatarTimedOut(false);
+    setTimeout(() => {
+      setAvatarTimedOut(false);
+    }, 0);
     if (ensAvatar) {
       return;
     }

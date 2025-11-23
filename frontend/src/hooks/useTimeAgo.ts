@@ -5,34 +5,48 @@ import { useEffect, useState } from "react";
  * Example: 1650000000 -> "2h ago"
  */
 export function useTimeAgo(timestamp?: number | null): string {
-    const [timeAgo, setTimeAgo] = useState<string>("");
+  // Compute initial value synchronously instead of in an effect
+  function computeTimeAgo(ts?: number | null) {
+    if (!ts) return "";
+    const now = Date.now() / 1000; // seconds
+    const diff = Math.max(0, now - ts);
+    const diffMins = Math.floor(diff / 60);
+    const diffHours = Math.floor(diff / 3600);
+    const diffDays = Math.floor(diff / 86400);
 
-    useEffect(() => {
-        if (!timestamp) {
-            setTimeAgo("");
-            return;
-        }
+    if (diffDays > 0) return `${diffDays}d ago`;
+    if (diffHours > 0) return `${diffHours}h ago`;
+    if (diffMins > 0) return `${diffMins}m ago`;
+    return "just now";
+  }
 
-        const update = () => {
-            const now = Date.now() / 1000; // seconds
-            const diff = Math.max(0, now - timestamp);
-            const diffMins = Math.floor(diff / 60);
-            const diffHours = Math.floor(diff / 3600);
-            const diffDays = Math.floor(diff / 86400);
+  const [timeAgo, setTimeAgo] = useState<string>(() =>
+    computeTimeAgo(timestamp)
+  );
 
-            let result = "";
-            if (diffDays > 0) result = `${diffDays}d ago`;
-            else if (diffHours > 0) result = `${diffHours}h ago`;
-            else if (diffMins > 0) result = `${diffMins}m ago`;
-            else result = "just now";
+  useEffect(() => {
+    if (!timestamp) {
+      setTimeout(() => {
+        setTimeAgo("");
+      }, 0);
+      return;
+    }
 
-            setTimeAgo(result);
-        };
+    // Do not call setTimeAgo synchronously in the effect to avoid cascading renders.
+    // Schedule to run on next tick.
+    const timeout = setTimeout(() => {
+      setTimeAgo(computeTimeAgo(timestamp));
+    }, 0);
 
-        update();
-        const interval = setInterval(update, 60_000); // refresh every minute
-        return () => clearInterval(interval);
-    }, [timestamp]);
+    const interval = setInterval(() => {
+      setTimeAgo(computeTimeAgo(timestamp));
+    }, 60_000);
 
-    return timeAgo;
+    return () => {
+      clearTimeout(timeout);
+      clearInterval(interval);
+    };
+  }, [timestamp]);
+
+  return timeAgo;
 }

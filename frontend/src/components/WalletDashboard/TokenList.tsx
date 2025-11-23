@@ -71,7 +71,11 @@ export function TokenList({
       {!isLoading && !error && hasAssets && (
         <div className="space-y-2">
           {assets.map((asset, i) => {
-            const portfolioPercentage = (asset.value / totalUsd) * 100;
+            // Calculate portfolio percentage, handle division by zero and NaN
+            const portfolioPercentage = 
+              totalUsd > 0 && !isNaN(totalUsd) && !isNaN(asset.value)
+                ? (asset.value / totalUsd) * 100
+                : 0;
 
             // Prioritize asset.logo from Alchemy, fallback to getTokenLogoUrl
             const logoUrl =

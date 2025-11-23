@@ -3,7 +3,7 @@ import { ArrowDownLeft, ArrowUpRight, Copy, Check } from "lucide-react";
 import { WalletTransaction } from "@/lib/transactions";
 import { TokenBalance } from "@/lib/balance";
 import { SUPPORTED_TOKENS } from "./constants";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface TransactionHistoryProps {
     transactions: WalletTransaction[];
@@ -32,15 +32,24 @@ export function TransactionHistory({
 
     const hasTransactions = transactions && Array.isArray(transactions) && transactions.length > 0;
     const isEmpty = !isLoading && !error && (!transactions || !Array.isArray(transactions) || transactions.length === 0);
+    
+    // Calculate current time using state to avoid impure function calls during render
+    const [currentTime, setCurrentTime] = useState(() => Date.now());
+    
+    useEffect(() => {
+        setTimeout(() => {
+            setCurrentTime(Date.now());
+        }, 0);
+    }, [transactions]);
 
     return (
         <div className="space-y-2">
             {/* List Header - Only show when there are transactions */}
             {!isLoading && !error && hasTransactions && (
-                <div className="flex items-center justify-between text-xs text-white/40 px-4 pb-2">
-                    <span>Activity</span>
-                    <span>Time</span>
-                </div>
+            <div className="flex items-center justify-between text-xs text-white/40 px-4 pb-2">
+                <span>Activity</span>
+                <span>Time</span>
+            </div>
             )}
 
             {/* Loading State */}
@@ -100,8 +109,7 @@ export function TransactionHistory({
                             typeof tx.timestamp === "string"
                                 ? parseInt(tx.timestamp)
                                 : tx.timestamp;
-                        const now = Date.now();
-                        const diffMs = now - txTimestamp;
+                        const diffMs = currentTime - txTimestamp;
                         const diffMins = Math.floor(diffMs / 60000);
                         const diffHours = Math.floor(diffMs / 3600000);
                         const diffDays = Math.floor(diffMs / 86400000);

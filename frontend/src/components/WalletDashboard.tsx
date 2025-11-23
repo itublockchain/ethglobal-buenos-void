@@ -128,117 +128,19 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
   const [transactionsError, setTransactionsError] = useState<string | null>(
     null
   );
+  // Get public wallet tokens for logo mapping
+  const { tokens: publicWalletTokens } = usePublicWalletTokens();
 
-  // Fetch balances from backend
-  useEffect(() => {
-    const loadBalances = async () => {
-      try {
-        setIsLoadingBalances(true);
-        setBalanceError(null);
-        const data = await fetchWalletBalances();
-        setBackendBalances(data.balances);
-      } catch (error) {
-        console.error("Failed to fetch balances:", error);
-        setBalanceError(
-          error instanceof Error ? error.message : "Failed to load balances"
-        );
-      } finally {
-        setIsLoadingBalances(false);
+  // Create logo map from publicWalletTokens
+  const tokenLogos = useMemo(() => {
+    const logos = new Map<string, string>();
+    publicWalletTokens.forEach((token) => {
+      if (token.logo) {
+        logos.set(token.address.toLowerCase(), token.logo);
       }
-    };
-
-    loadBalances();
-  }, []);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadTransactions = async () => {
-      try {
-        setIsLoadingTransactions(true);
-        setTransactionsError(null);
-        const apiTransactions = await fetchWalletTransactions();
-        if (!isMounted) {
-          return;
-        }
-
-        const sortedTransactions = [...apiTransactions].sort(
-          (a, b) => Number(b.timestamp ?? 0) - Number(a.timestamp ?? 0)
-        );
-
-        setTransactions(sortedTransactions);
-      } catch (error) {
-        if (!isMounted) {
-          return;
-        }
-        setTransactionsError(
-          error instanceof Error ? error.message : "Failed to load transactions"
-        );
-        setTransactions([]);
-      } finally {
-        if (isMounted) {
-          setIsLoadingTransactions(false);
-        }
-      }
-    };
-
-    loadTransactions();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  const refreshBalances = useCallback(async () => {
-    try {
-      setIsLoadingBalances(true);
-      setBalanceError(null);
-      const data = await fetchWalletBalances();
-      setBackendBalances(data.balances);
-    } catch (error) {
-      console.error("Failed to refresh balances:", error);
-      setBalanceError(
-        error instanceof Error ? error.message : "Failed to load balances"
-      );
-    } finally {
-      setIsLoadingBalances(false);
-    }
-  }, []);
-
-  const refreshTransactions = useCallback(async () => {
-    try {
-      setIsLoadingTransactions(true);
-      setTransactionsError(null);
-      const apiTransactions = await fetchWalletTransactions();
-      const sortedTransactions = [...apiTransactions].sort(
-        (a, b) => Number(b.timestamp ?? 0) - Number(a.timestamp ?? 0)
-      );
-      setTransactions(sortedTransactions);
-    } catch (error) {
-      console.error("Failed to refresh transactions:", error);
-      setTransactionsError(
-        error instanceof Error ? error.message : "Failed to load transactions"
-      );
-    } finally {
-      setIsLoadingTransactions(false);
-    }
-  }, []);
-  // Calculate total USD value from backend balances
-  const totalUsdFromBackend = useMemo(() => {
-    // backendBalances array of objects with amount and value properties
-    const calculatedTotal = backendBalances.reduce((acc, balance) => {
-      const balanceValue = parseFloat(balance.balance);
-      let amount = 0;
-      if (!isNaN(balanceValue)) {
-        amount = balanceValue;
-      }
-
-      // TODO: Use real price API
-      return acc;
-    }, 0);
-
-    return calculatedTotal;
-  }, [backendBalances]);
+    });
+    return logos;
+  }, [publicWalletTokens]);
 
   // Fetch token metadata (symbol, name) for unknown tokens
   const unknownTokens = useMemo(() => {
@@ -279,6 +181,200 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
       staleTime: Infinity,
     },
   });
+
+  // Fetch token metadata with prices for backend balances
+  const [tokenPrices, setTokenPrices] = useState<Map<string, number>>(
+    new Map()
+  );
+
+  useEffect(() => {
+    if (!backendBalances || backendBalances.length === 0) {
+      setTokenPrices(new Map());
+      return;
+    }
+
+    const fetchPrices = async () => {
+      try {
+        // Wait for tokenMetadata to be available to get on-chain symbols
+        // This ensures we have the most accurate symbol for price fetching
+        const tokensToFetch = backendBalances
+          .filter((balance) => {
+            const isEth =
+              balance.token === "0x0000000000000000000000000000000000000000";
+            return !isEth;
+          })
+          .map((balance) => {
+            // Try to get symbol from multiple sources
+            let symbol =
+              balance.symbol ||
+              SUPPORTED_TOKENS.find(
+                (t) => t.address?.toLowerCase() === balance.token.toLowerCase()
+              )?.symbol;
+
+            // If symbol is still missing, try to get from on-chain metadata
+            if (!symbol && tokenMetadata) {
+              const index = unknownTokens.indexOf(balance.token as Address);
+              if (index !== -1) {
+                const baseIndex = index * 3;
+                const symbolResult = tokenMetadata[baseIndex];
+                if (symbolResult?.status === "success") {
+                  symbol = symbolResult.result as string;
+                }
+              }
+            }
+
+            return {
+              address: balance.token,
+              symbol,
+            };
+          })
+          .filter((t) => t.symbol) as Array<{
+          address: string;
+          symbol: string;
+        }>;
+
+        if (tokensToFetch.length === 0) return;
+
+        // Fetch prices from API route
+        const response = await fetch("/api/token-prices", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ tokens: tokensToFetch }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch prices");
+        }
+
+        const data = await response.json();
+        const prices = new Map<string, number>();
+        Object.entries(data.prices || {}).forEach(([address, price]) => {
+          prices.set(address.toLowerCase(), price as number);
+        });
+
+        setTokenPrices(prices);
+      } catch (error) {
+        console.error("Failed to fetch token prices:", error);
+      }
+    };
+
+    // Fetch prices when backendBalances or tokenMetadata changes
+    fetchPrices();
+  }, [backendBalances, tokenMetadata, unknownTokens]);
+
+  // Get connected address to trigger refetch on address change
+  const { address } = useAccount();
+  const hasFetchedRef = useRef(false);
+
+  // Fetch balances from backend - only once on mount
+  useEffect(() => {
+    // Prevent double fetch in React Strict Mode
+    if (hasFetchedRef.current) return;
+    hasFetchedRef.current = true;
+
+    const loadBalances = async () => {
+      try {
+        setIsLoadingBalances(true);
+        setBalanceError(null);
+        // Always force refresh to get fresh data from server
+        const data = await fetchWalletBalances(true);
+        setBackendBalances(data.balances);
+      } catch (error) {
+        console.error("Failed to fetch balances:", error);
+        setBalanceError(
+          error instanceof Error ? error.message : "Failed to load balances"
+        );
+      } finally {
+        setIsLoadingBalances(false);
+      }
+    };
+
+    // Fetch fresh data on mount
+    loadBalances();
+  }, []); // Only run once on mount
+
+  const hasFetchedTransactionsRef = useRef(false);
+
+  useEffect(() => {
+    // Prevent double fetch in React Strict Mode
+    if (hasFetchedTransactionsRef.current) return;
+    hasFetchedTransactionsRef.current = true;
+
+    let isMounted = true;
+
+    const loadTransactions = async () => {
+      try {
+        setIsLoadingTransactions(true);
+        setTransactionsError(null);
+        const apiTransactions = await fetchWalletTransactions();
+        if (!isMounted) {
+          return;
+        }
+
+        const sortedTransactions = [...apiTransactions].sort(
+          (a, b) => Number(b.timestamp ?? 0) - Number(a.timestamp ?? 0)
+        );
+
+        setTransactions(sortedTransactions);
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+        setTransactionsError(
+          error instanceof Error ? error.message : "Failed to load transactions"
+        );
+        setTransactions([]);
+      } finally {
+        if (isMounted) {
+          setIsLoadingTransactions(false);
+        }
+      }
+    };
+
+    loadTransactions();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []); // Only run once on mount
+
+  const refreshBalances = useCallback(async () => {
+    try {
+      setIsLoadingBalances(true);
+      setBalanceError(null);
+      // Force refresh to bypass cache
+      const data = await fetchWalletBalances(true);
+      setBackendBalances(data.balances);
+    } catch (error) {
+      console.error("Failed to refresh balances:", error);
+      setBalanceError(
+        error instanceof Error ? error.message : "Failed to load balances"
+      );
+    } finally {
+      setIsLoadingBalances(false);
+    }
+  }, []);
+
+  const refreshTransactions = useCallback(async () => {
+    try {
+      setIsLoadingTransactions(true);
+      setTransactionsError(null);
+      const apiTransactions = await fetchWalletTransactions();
+      const sortedTransactions = [...apiTransactions].sort(
+        (a, b) => Number(b.timestamp ?? 0) - Number(a.timestamp ?? 0)
+      );
+      setTransactions(sortedTransactions);
+    } catch (error) {
+      console.error("Failed to refresh transactions:", error);
+      setTransactionsError(
+        error instanceof Error ? error.message : "Failed to load transactions"
+      );
+    } finally {
+      setIsLoadingTransactions(false);
+    }
+  }, []);
 
   // Convert backend balances to Asset format for display
   const assetsFromBackend = useMemo(() => {
@@ -333,11 +429,15 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
         (symbol === "ETH" ? "Ether" : symbol) ||
         "Unknown Token";
 
-      // TODO: Use real price API
-      const value = 0;
-
       // Get actual backend token address
       const tokenAddress = balance.token;
+
+      // Get price from CoinGecko metadata only
+      const price = tokenPrices.get(tokenAddress.toLowerCase()) || 0;
+      const value = amount * price;
+
+      // Get logo from tokenLogos map (from publicWalletTokens or fetched metadata)
+      const logo = tokenLogos.get(tokenAddress.toLowerCase());
 
       return {
         symbol,
@@ -345,9 +445,22 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
         amount,
         value,
         address: tokenAddress,
+        logo, // Logo from publicWalletTokens or fetched metadata
       };
     });
-  }, [backendBalances, wallet.assets, tokenMetadata, unknownTokens]);
+  }, [
+    backendBalances,
+    wallet.assets,
+    tokenMetadata,
+    unknownTokens,
+    tokenLogos,
+    tokenPrices,
+  ]);
+
+  // Calculate total USD value from assets
+  const totalUsdFromBackend = useMemo(() => {
+    return assetsFromBackend.reduce((acc, asset) => acc + asset.value, 0);
+  }, [assetsFromBackend]);
 
   // Memoized onSuccess callback for DepositDialog
   const handleDepositSuccess = useCallback(async () => {
@@ -430,7 +543,7 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
           ].map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
+              onClick={() => setActiveTab(tab.id as "tokens" | "history")}
               className={`pb-4 text-sm font-medium transition-colors relative ${
                 activeTab === tab.id
                   ? "text-white"

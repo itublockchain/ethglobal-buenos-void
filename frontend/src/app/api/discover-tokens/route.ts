@@ -53,13 +53,17 @@ export async function GET(request: NextRequest) {
     }
 
     // Filter tokens with non-zero balance
+    interface TokenBalance {
+      tokenBalance?: string;
+      contractAddress: string;
+    }
     const tokens =
       data.result?.tokenBalances
-        ?.filter((token: any) => {
+        ?.filter((token: TokenBalance) => {
           const balance = BigInt(token.tokenBalance || "0");
           return balance > 0n;
         })
-        .map((token: any) => token.contractAddress as Address) || [];
+        .map((token: TokenBalance) => token.contractAddress as Address) || [];
 
     return NextResponse.json({ tokens });
   } catch (error) {
