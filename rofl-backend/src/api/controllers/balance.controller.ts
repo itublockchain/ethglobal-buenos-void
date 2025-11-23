@@ -1,18 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
-import { getBalance } from '../../services/balance.service';
-
-// Known tokens
-const TOKENS = [
-  '0x0000000000000000000000000000000000000000', // Native token (ETH)
-  '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
-];
+import { getAllBalances } from '../../services/balance.service';
 
 export class BalanceController {
   /**
    * Get balances for authenticated wallet
    * GET /api/balance
    */
-  getBalances(req: Request, res: Response, next: NextFunction): void {
+  async getBalances(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const wallet = req.wallet;
 
@@ -21,10 +15,7 @@ export class BalanceController {
         return;
       }
 
-      const balances = TOKENS.map((token) => ({
-        token,
-        balance: getBalance(wallet, token),
-      }));
+      const balances = await getAllBalances(wallet);
 
       res.json({
         success: true,

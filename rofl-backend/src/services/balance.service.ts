@@ -1,134 +1,179 @@
-import { SMT } from '@zk-kit/smt';
-import { keccak256, toBytes, toHex, concat } from 'viem';
-import { Wallet } from 'ethers';
-import { BalanceProof, BalanceEntry } from '../types/balance.types';
+import { SMT } from '@cedoor/smt';
+import { toBytes, concat } from 'viem';
+import { keccak256 } from 'ethers';
+import { BalanceProof, BalanceWithProof } from '../types/balance.types';
+import { dbGet, dbPut, dbGetAll } from './db.service';
+import { getBalanceSecret } from './secret.service';
 
 // In-memory SMT instance
 let smt: SMT;
-let secretKey: string;
 
 // Precision factor for storing decimals as BigInt (10^18)
 const PRECISION = BigInt(10 ** 18);
 
-// Convert decimal string to BigInt for storage
-const toBigIntBalance = (balance: string): bigint => {
+// Convert decimal string to hex for storage
+const toHexBalance = (balance: string): string => {
   const num = parseFloat(balance);
-  return BigInt(Math.floor(num * Number(PRECISION)));
+  const bigVal = BigInt(Math.floor(num * Number(PRECISION)));
+  return normalize(bigVal.toString(16));
 };
 
-// Convert BigInt back to decimal string
-const fromBigIntBalance = (value: bigint): string => {
-  const num = Number(value) / Number(PRECISION);
+// Convert hex back to decimal string
+const fromHexBalance = (value: string): string => {
+  const bigVal = BigInt('0x' + value);
+  const num = Number(bigVal) / Number(PRECISION);
   return num.toString();
 };
 
-// Hash function for SMT (must return BigInt)
-const hash = (childNodes: (string | bigint)[]): bigint => {
-  const concatenated = childNodes.map(n => BigInt(n).toString(16).padStart(64, '0')).join('');
-  return BigInt(keccak256(toBytes('0x' + concatenated)));
+// Normalize hex string (strip 0x, pad to 64 chars)
+const normalize = (hex: string): string => {
+  const h = hex.replace(/^0x/, '');
+  return h.padStart(64, '0');
 };
 
-// Generate key for SMT leaf (returns BigInt)
-const generateKey = (wallet: string, token: string): bigint => {
+// Hash function for SMT (must return hex string)
+const hash = (childNodes: (string | bigint)[]): string => {
+  const concatenated = childNodes.map(n => normalize(String(n))).join('');
+  return normalize(keccak256(toBytes('0x' + concatenated)));
+};
+
+// Generate key for SMT leaf (returns hex string)
+export const generateKey = (wallet: string, token: string, userSecret: string): string => {
   const combined = concat([
     toBytes(wallet.toLowerCase()),
     toBytes(token.toLowerCase()),
-    toBytes(secretKey),
+    toBytes(userSecret),
   ]);
-  return BigInt(keccak256(combined));
+  return normalize(keccak256(combined));
 };
 
 // Initialize the balance service
 export const initializeBalanceService = async (): Promise<void> => {
-  const privateKey = process.env.TEST_PRIVATE_KEY;
-  if (!privateKey) {
-    throw new Error('TEST_PRIVATE_KEY is required for balance service');
-  }
-
-  // Generate secret key from signed message
-  const wallet = new Wallet(privateKey);
-  const message = 'Secret Signature for Void Wallet';
-  const signature = await wallet.signMessage(message);
-  secretKey = keccak256(toBytes(signature));
-  console.log('Balance service secret key generated');
-
   // Initialize SMT with keccak256 hash
-  smt = new SMT(hash, true);
+  smt = new SMT(hash);
 
-  // Add mock data
-  initializeMockData();
+  // Load existing data from RocksDB
+  await loadFromDatabase();
 
   console.log('Balance service initialized with SMT');
   console.log('SMT Root:', getRoot());
 };
 
-// Initialize mock data for cold start
-const initializeMockData = (): void => {
-  // Mock wallets
-  const wallets = [
-    '0x46e11Dd000D06baFaF401998D5E0B8F15d338126',
-    '0x742d35Cc6634C0532925a3b844Bc454e4438f44e',
-    '0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B',
-  ];
+// Load balances from RocksDB and rebuild SMT
+const loadFromDatabase = async (): Promise<void> => {
+  const entries = await dbGetAll('balance:');
 
-  // Mock tokens (Base Sepolia)
-  const tokens = [
-    '0x0000000000000000000000000000000000000000', // Native token (ETH)
-    '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // USDC on Base Sepolia
-  ];
-
-  // Set initial balances (human-readable decimals)
-  const mockBalances: BalanceEntry[] = [
-    { wallet: wallets[0], token: tokens[0], balance: '1' }, // 1 ETH
-    { wallet: wallets[0], token: tokens[1], balance: '1000' }, // 1000 USDC
-    { wallet: wallets[1], token: tokens[0], balance: '5' }, // 5 ETH
-    { wallet: wallets[1], token: tokens[1], balance: '2500' }, // 2500 USDC
-    { wallet: wallets[2], token: tokens[0], balance: '10' }, // 10 ETH
-    { wallet: wallets[2], token: tokens[1], balance: '5000' }, // 5000 USDC
-  ];
-
-  for (const entry of mockBalances) {
-    setBalance(entry.wallet, entry.token, entry.balance);
+  if (entries.length === 0) {
+    console.log('No existing balance data found, starting with empty SMT');
+    return;
   }
 
-  console.log(`Mock data initialized: ${mockBalances.length} balance entries`);
+  console.log(`Loading ${entries.length} balance entries from database...`);
+  let loadedCount = 0;
+
+  for (const entry of entries) {
+    // Key format: balance:wallet:token
+    const parts = entry.key.split(':');
+    const walletAddr = parts[1];
+    const tokenAddr = parts[2];
+    const balance = entry.value;
+
+    // Get user's secret to generate SMT key
+    const userSecret = await getBalanceSecret(walletAddr);
+    if (!userSecret) {
+      console.warn(`Skipping balance for ${walletAddr} - no secret found`);
+      continue;
+    }
+    const key = generateKey(walletAddr, tokenAddr, userSecret);
+    smt.add(key, toHexBalance(balance));
+
+    loadedCount++;
+  }
+
+  console.log(`Loaded ${loadedCount} balance entries from database`);
 };
 
 // Get balance for wallet + token
-export const getBalance = (wallet: string, token: string): string => {
-  const key = generateKey(wallet, token);
+export const getBalance = async (wallet: string, token: string): Promise<string> => {
+  const userSecret = await getBalanceSecret(wallet);
+  if (!userSecret) {
+    return '0';
+  }
+
+  const key = generateKey(wallet, token, userSecret);
   const value = smt.get(key);
-  return value ? fromBigIntBalance(BigInt(String(value))) : '0';
+  return value ? fromHexBalance(String(value)) : '0';
+};
+
+// Get all balances for a wallet from database with proofs
+export const getAllBalances = async (wallet: string): Promise<BalanceWithProof[]> => {
+  const prefix = `balance:${wallet.toLowerCase()}:`;
+  const entries = await dbGetAll(prefix);
+
+  return Promise.all(entries.map(async (entry) => {
+    const token = entry.key.split(':')[2];
+    const proof = await getProof(wallet, token);
+    return {
+      token,
+      balance: entry.value,
+      proof,
+    };
+  }));
 };
 
 // Set balance for wallet + token
-export const setBalance = (wallet: string, token: string, balance: string): void => {
-  const key = generateKey(wallet, token);
-  smt.add(key, toBigIntBalance(balance));
+export const setBalance = async (wallet: string, token: string, balance: string): Promise<void> => {
+  const userSecret = await getBalanceSecret(wallet);
+  if (!userSecret) {
+    throw new Error('User has not set balance secret');
+  }
+
+  const key = generateKey(wallet, token, userSecret);
+  smt.add(key, toHexBalance(balance));
+
+  // Persist to RocksDB
+  const dbKey = `balance:${wallet.toLowerCase()}:${token.toLowerCase()}`;
+  await dbPut(dbKey, balance);
 };
 
 // Update balance (for transfers)
-export const updateBalance = (wallet: string, token: string, newBalance: string): void => {
-  const key = generateKey(wallet, token);
+export const updateBalance = async (wallet: string, token: string, newBalance: string): Promise<void> => {
+  const userSecret = await getBalanceSecret(wallet);
+  if (!userSecret) {
+    throw new Error('User has not set balance secret');
+  }
+
+  const key = generateKey(wallet, token, userSecret);
   const exists = smt.get(key);
 
   if (exists) {
-    smt.update(key, toBigIntBalance(newBalance));
+    smt.update(key, toHexBalance(newBalance));
   } else {
-    smt.add(key, toBigIntBalance(newBalance));
+    smt.add(key, toHexBalance(newBalance));
   }
+
+  // Persist to RocksDB
+  const dbKey = `balance:${wallet.toLowerCase()}:${token.toLowerCase()}`;
+  await dbPut(dbKey, newBalance);
 };
 
 // Get merkle proof for balance
-export const getProof = (wallet: string, token: string): BalanceProof => {
-  const key = generateKey(wallet, token);
+export const getProof = async (wallet: string, token: string): Promise<BalanceProof> => {
+  const userSecret = await getBalanceSecret(wallet);
+  if (!userSecret) {
+    throw new Error('User has not set balance secret');
+  }
+
+  const key = generateKey(wallet, token, userSecret);
   const proof = smt.createProof(key);
+  const balance = await getBalance(wallet, token);
+  const value = toHexBalance(balance);
 
   return {
-    root: String(proof.root),
-    siblings: proof.siblings.map(s => String(s)),
-    key: String(key),
-    value: getBalance(wallet, token),
+    root: normalize(String(proof.root)),
+    siblings: proof.sidenodes.map(s => normalize(String(s))),
+    key: key,
+    value: value,
   };
 };
 
@@ -139,25 +184,24 @@ export const getRoot = (): string => {
 
 // Verify a proof
 export const verifyProof = (proof: BalanceProof): boolean => {
-  const key = BigInt(proof.key);
-  const smtProof = smt.createProof(key);
-  return smtProof.root === BigInt(proof.root);
+  const smtProof = smt.createProof(proof.key);
+  return normalize(String(smtProof.root)) === proof.root;
 };
 
 export class BalanceService {
-  getBalance(wallet: string, token: string): string {
+  async getBalance(wallet: string, token: string): Promise<string> {
     return getBalance(wallet, token);
   }
 
-  setBalance(wallet: string, token: string, balance: string): void {
-    setBalance(wallet, token, balance);
+  async setBalance(wallet: string, token: string, balance: string): Promise<void> {
+    await setBalance(wallet, token, balance);
   }
 
-  updateBalance(wallet: string, token: string, newBalance: string): void {
-    updateBalance(wallet, token, newBalance);
+  async updateBalance(wallet: string, token: string, newBalance: string): Promise<void> {
+    await updateBalance(wallet, token, newBalance);
   }
 
-  getProof(wallet: string, token: string): BalanceProof {
+  async getProof(wallet: string, token: string): Promise<BalanceProof> {
     return getProof(wallet, token);
   }
 

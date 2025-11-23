@@ -4,3 +4,5 @@ dist
 *.db
 *.db-wal
 *.db-shm
+data
+void-backend.default.orc

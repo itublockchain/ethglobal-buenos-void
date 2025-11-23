@@ -14,3 +14,8 @@ export interface LoginResponse {
   token: string;
   wallet: string;
 }
+
+export interface MeResponse {
+  wallet: string;
+  required_secrets: string[];
+}

@@ -10,3 +10,9 @@ export interface BalanceEntry {
   token: string;
   balance: string;
 }
+
+export interface BalanceWithProof {
+  token: string;
+  balance: string;
+  proof: BalanceProof;
+}
