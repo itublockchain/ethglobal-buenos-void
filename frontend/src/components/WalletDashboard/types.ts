@@ -35,4 +35,5 @@ export interface Wallet {
 
 export interface WalletDashboardProps {
     wallet: Wallet;
+    onTokensUpdate?: (tokens: Asset[]) => void;
 }

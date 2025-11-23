@@ -103,7 +103,11 @@ export function WithdrawDialog({
 
       const tokenAddress = selectedToken.address || "0x0000000000000000000000000000000000000000";
 
-      await withdrawFromWallet(withdrawAmount, tokenAddress);
+      const result = await withdrawFromWallet(withdrawAmount, tokenAddress);
+
+      if (result.txHash) {
+        console.log("Withdraw Transaction Hash:", result.txHash);
+      }
 
       setIsWithdrawSuccess(true);
     } catch (err) {

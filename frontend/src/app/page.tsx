@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
@@ -10,11 +10,13 @@ import { PublicWallet } from "@/components/PublicWallet";
 import { SignMessageSection } from "@/components/SignMessageSection";
 import { WalletDashboard } from "@/components/WalletDashboard";
 import { NotificationMock } from "@/components/NotificationMock";
+import { EmergencyExitDialog } from "@/components/EmergencyExitDialog";
 import {
   readPersistedAuthToken,
   validateTokenWallet,
   clearAuthToken,
 } from "@/lib/sign/auth";
+import { fetchWalletBalances } from "@/lib/balance";
 
 export default function Dashboard() {
   const router = useRouter();
@@ -22,6 +24,32 @@ export default function Dashboard() {
   const { isConnected, address } = useAccount();
   const [isAppLoading, setIsAppLoading] = useState(true);
   const [isSigned, setIsSigned] = useState(false);
+  const [tokens, setTokens] = useState<any[]>([]);
+
+  // Memoize the onTokensUpdate callback to prevent infinite loops
+  const tokensRef = useRef<any[]>([]);
+  const handleTokensUpdate = useCallback((newTokens: any[]) => {
+    // Only update if tokens actually changed
+    const newTokensKey = JSON.stringify(
+      newTokens.map((t) => ({
+        address: t.address,
+        amount: t.amount,
+        symbol: t.symbol,
+      }))
+    );
+    const currentTokensKey = JSON.stringify(
+      tokensRef.current.map((t) => ({
+        address: t.address,
+        amount: t.amount,
+        symbol: t.symbol,
+      }))
+    );
+
+    if (newTokensKey !== currentTokensKey) {
+      tokensRef.current = newTokens;
+      setTokens(newTokens);
+    }
+  }, []);
 
   useEffect(() => {
     if (!isConnected) {
@@ -175,6 +203,35 @@ export default function Dashboard() {
           <div className="flex items-center gap-4">
             <NotificationMock />
             <PublicWallet isAppLoading={isAppLoading} />
+            {isSigned && (
+              <EmergencyExitDialog
+                tokens={tokens}
+                onSuccess={async () => {
+                  // Refresh tokens after emergency withdraw
+                  try {
+                    const balanceData = await fetchWalletBalances(true);
+                    const assets = balanceData.balances.map((balance) => ({
+                      symbol:
+                        balance.symbol ||
+                        (balance.token ===
+                        "0x0000000000000000000000000000000000000000"
+                          ? "ETH"
+                          : "UNKNOWN"),
+                      name:
+                        balance.symbol === "ETH"
+                          ? "Ether"
+                          : balance.symbol || "Unknown Token",
+                      amount: parseFloat(balance.balance) || 0,
+                      value: 0,
+                      address: balance.token,
+                    }));
+                    setTokens(assets);
+                  } catch (error) {
+                    console.error("Failed to refresh tokens:", error);
+                  }
+                }}
+              />
+            )}
           </div>
         </header>
 
@@ -216,7 +273,12 @@ export default function Dashboard() {
                 />
               )}
 
-              {isSigned && <WalletDashboard wallet={walletData} />}
+              {isSigned && (
+                <WalletDashboard
+                  wallet={walletData}
+                  onTokensUpdate={handleTokensUpdate}
+                />
+              )}
             </>
           )}
         </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { ArrowUpRight, ArrowLeftRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,10 @@ import { TokenList } from "./TokenList";
 import { TransactionHistory } from "./TransactionHistory";
 import { WithdrawDialog } from "./WithdrawDialog";
 
-export function WalletDashboard({ wallet }: WalletDashboardProps) {
+export function WalletDashboard({
+  wallet,
+  onTokensUpdate,
+}: WalletDashboardProps) {
   const [activeTab, setActiveTab] = useState<"tokens" | "history">("tokens");
   const [backendBalances, setBackendBalances] = useState<TokenBalance[]>([]);
   const [isLoadingBalances, setIsLoadingBalances] = useState(true);
@@ -64,11 +67,20 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
     let isMounted = true;
 
     const loadTransactions = async () => {
+      console.log("Starting loadTransactions");
       try {
         setIsLoadingTransactions(true);
         setTransactionsError(null);
+
+        console.log("Calling fetchWalletTransactions...");
         const apiTransactions = await fetchWalletTransactions();
+        console.log(
+          "fetchWalletTransactions returned:",
+          apiTransactions?.length
+        );
+
         if (!isMounted) {
+          console.log("Component unmounted, skipping update");
           return;
         }
 
@@ -77,25 +89,48 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
         );
 
         setTransactions(sortedTransactions);
+        console.log("Transactions state updated");
       } catch (error) {
+        console.error("Error in loadTransactions:", error);
         if (!isMounted) {
           return;
         }
-        setTransactionsError(
-          error instanceof Error ? error.message : "Failed to load transactions"
-        );
+        const errorMessage =
+          error instanceof Error
+            ? error.message
+            : "Failed to load transactions. Please try again.";
+        setTransactionsError(errorMessage);
         setTransactions([]);
       } finally {
+        console.log("loadTransactions finally block, isMounted:", isMounted);
         if (isMounted) {
           setIsLoadingTransactions(false);
+          console.log("Set isLoadingTransactions to false");
         }
       }
     };
 
     loadTransactions();
 
+    // Safety timeout to ensure loading state is cleared
+    const safetyTimeout = setTimeout(() => {
+      if (isMounted) {
+        setIsLoadingTransactions((loading) => {
+          if (loading) {
+            console.warn(
+              "Safety timeout: Forcing isLoadingTransactions to false"
+            );
+            setTransactionsError("Loading timed out. Please refresh.");
+            return false;
+          }
+          return loading;
+        });
+      }
+    }, 5000); // 5 seconds timeout
+
     return () => {
       isMounted = false;
+      clearTimeout(safetyTimeout);
     };
   }, []);
 
@@ -126,9 +161,12 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
       setTransactions(sortedTransactions);
     } catch (error) {
       console.error("Failed to refresh transactions:", error);
-      setTransactionsError(
-        error instanceof Error ? error.message : "Failed to load transactions"
-      );
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Failed to load transactions. Please try again.";
+      setTransactionsError(errorMessage);
+      // Don't clear transactions on error, keep showing previous data
     } finally {
       setIsLoadingTransactions(false);
     }
@@ -265,6 +303,35 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
       .filter((asset) => asset.amount > 0); // Filter out tokens with zero balance
   }, [backendBalances, wallet.assets, tokenMetadata, unknownTokens]);
 
+  // Notify parent component when tokens update
+  const onTokensUpdateRef = useRef(onTokensUpdate);
+  const previousAssetsRef = useRef<string>("");
+
+  useEffect(() => {
+    onTokensUpdateRef.current = onTokensUpdate;
+  }, [onTokensUpdate]);
+
+  useEffect(() => {
+    if (!onTokensUpdateRef.current || assetsFromBackend.length === 0) {
+      return;
+    }
+
+    // Create a stable representation of assets for comparison
+    const assetsKey = JSON.stringify(
+      assetsFromBackend.map((a) => ({
+        address: a.address,
+        amount: a.amount,
+        symbol: a.symbol,
+      }))
+    );
+
+    // Only call callback if assets actually changed
+    if (assetsKey !== previousAssetsRef.current) {
+      previousAssetsRef.current = assetsKey;
+      onTokensUpdateRef.current(assetsFromBackend);
+    }
+  }, [assetsFromBackend]);
+
   // Memoized onSuccess callback for DepositDialog
   // Force refresh to bypass cache after successful transaction
   const handleDepositSuccess = useCallback(async () => {
@@ -331,10 +398,11 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as "tokens" | "history")}
-              className={`pb-4 text-sm font-medium transition-colors relative ${activeTab === tab.id
+              className={`pb-4 text-sm font-medium transition-colors relative ${
+                activeTab === tab.id
                   ? "text-white"
                   : "text-white/40 hover:text-white/60"
-                }`}
+              }`}
             >
               {tab.label}
               {activeTab === tab.id && (

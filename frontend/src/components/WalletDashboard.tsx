@@ -105,9 +105,13 @@ interface Wallet {
 
 interface WalletDashboardProps {
   wallet: Wallet;
+  onTokensUpdate?: (tokens: Asset[]) => void;
 }
 
-export function WalletDashboard({ wallet }: WalletDashboardProps) {
+export function WalletDashboard({
+  wallet,
+  onTokensUpdate,
+}: WalletDashboardProps) {
   const [activeTab, setActiveTab] = useState<"tokens" | "history">("tokens");
   const [backendBalances, setBackendBalances] = useState<TokenBalance[]>([]);
   const [isLoadingBalances, setIsLoadingBalances] = useState(true);
@@ -284,49 +288,37 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
     loadBalances();
   }, []); // Only run once on mount
 
-  const hasFetchedTransactionsRef = useRef(false);
-
   useEffect(() => {
-    // Prevent double fetch in React Strict Mode
-    if (hasFetchedTransactionsRef.current) return;
-    hasFetchedTransactionsRef.current = true;
-
-    let isMounted = true;
-
     const loadTransactions = async () => {
       try {
         setIsLoadingTransactions(true);
         setTransactionsError(null);
-        const apiTransactions = await fetchWalletTransactions();
-        if (!isMounted) {
-          return;
-        }
 
+        const apiTransactions = await fetchWalletTransactions();
+
+        // Always update state - React will ignore if component is unmounted
+        // This ensures transactions are set even if component was unmounted during fetch
         const sortedTransactions = [...apiTransactions].sort(
           (a, b) => Number(b.timestamp ?? 0) - Number(a.timestamp ?? 0)
         );
 
         setTransactions(sortedTransactions);
       } catch (error) {
-        if (!isMounted) {
-          return;
-        }
-        setTransactionsError(
-          error instanceof Error ? error.message : "Failed to load transactions"
-        );
+        // Always update state - React will ignore if component is unmounted
+        const errorMessage =
+          error instanceof Error
+            ? error.message
+            : "Failed to load transactions. Please try again.";
+        setTransactionsError(errorMessage);
         setTransactions([]);
       } finally {
-        if (isMounted) {
-          setIsLoadingTransactions(false);
-        }
+        // Always set loading to false
+        // React will safely ignore state updates if component is unmounted
+        setIsLoadingTransactions(false);
       }
     };
 
     loadTransactions();
-
-    return () => {
-      isMounted = false;
-    };
   }, []); // Only run once on mount
 
   const refreshBalances = useCallback(async () => {
@@ -357,9 +349,12 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
       setTransactions(sortedTransactions);
     } catch (error) {
       console.error("Failed to refresh transactions:", error);
-      setTransactionsError(
-        error instanceof Error ? error.message : "Failed to load transactions"
-      );
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Failed to load transactions. Please try again.";
+      setTransactionsError(errorMessage);
+      // Don't clear transactions on error, keep showing previous data
     } finally {
       setIsLoadingTransactions(false);
     }
@@ -445,6 +440,35 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
     tokenLogos,
     tokenPrices,
   ]);
+
+  // Notify parent component when tokens update
+  const onTokensUpdateRef = useRef(onTokensUpdate);
+  const previousAssetsRef = useRef<string>("");
+
+  useEffect(() => {
+    onTokensUpdateRef.current = onTokensUpdate;
+  }, [onTokensUpdate]);
+
+  useEffect(() => {
+    if (!onTokensUpdateRef.current || assetsFromBackend.length === 0) {
+      return;
+    }
+
+    // Create a stable representation of assets for comparison
+    const assetsKey = JSON.stringify(
+      assetsFromBackend.map((a) => ({
+        address: a.address,
+        amount: a.amount,
+        symbol: a.symbol,
+      }))
+    );
+
+    // Only call callback if assets actually changed
+    if (assetsKey !== previousAssetsRef.current) {
+      previousAssetsRef.current = assetsKey;
+      onTokensUpdateRef.current(assetsFromBackend);
+    }
+  }, [assetsFromBackend]);
 
   // Calculate total USD value from assets
   const totalUsdFromBackend = useMemo(() => {

@@ -16,6 +16,7 @@ export type WithdrawResponse = {
   success: boolean;
   message?: string;
   error?: string;
+  txHash?: string;
 };
 
 /**
@@ -57,7 +58,7 @@ export async function withdrawFromWallet(
           errorMessage = text;
         }
       }
-    } catch {}
+    } catch { }
     console.error("Backend error response:", errorMessage);
     throw new Error(errorMessage);
   }

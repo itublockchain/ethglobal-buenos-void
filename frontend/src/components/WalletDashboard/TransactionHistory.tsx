@@ -32,24 +32,33 @@ export function TransactionHistory({
 
     const hasTransactions = transactions && Array.isArray(transactions) && transactions.length > 0;
     const isEmpty = !isLoading && !error && (!transactions || !Array.isArray(transactions) || transactions.length === 0);
-    
+
     // Calculate current time using state to avoid impure function calls during render
+    // Update every minute to keep "time ago" accurate
     const [currentTime, setCurrentTime] = useState(() => Date.now());
-    
+
     useEffect(() => {
-        setTimeout(() => {
+        // Update immediately when transactions change
+        setCurrentTime(Date.now());
+
+        // Update every minute to keep time display accurate
+        const interval = setInterval(() => {
             setCurrentTime(Date.now());
-        }, 0);
+        }, 60000); // Update every 60 seconds
+
+        return () => {
+            clearInterval(interval);
+        };
     }, [transactions]);
 
     return (
         <div className="space-y-2">
             {/* List Header - Only show when there are transactions */}
             {!isLoading && !error && hasTransactions && (
-            <div className="flex items-center justify-between text-xs text-white/40 px-4 pb-2">
-                <span>Activity</span>
-                <span>Time</span>
-            </div>
+                <div className="flex items-center justify-between text-xs text-white/40 px-4 pb-2">
+                    <span>Activity</span>
+                    <span>Time</span>
+                </div>
             )}
 
             {/* Loading State */}
@@ -89,9 +98,15 @@ export function TransactionHistory({
             {!isLoading && !error && hasTransactions && (
                 <div className="space-y-2">
                     {transactions.map((tx, i) => {
-                        const isSent = tx.type === "sent";
-                        const Icon = isSent ? ArrowUpRight : ArrowDownLeft;
-                        const iconColor = isSent ? "text-red-400" : "text-green-400";
+                        const isOutgoing = tx.type === "sent" || tx.type === "deposit";
+                        const Icon = isOutgoing ? ArrowUpRight : ArrowDownLeft;
+                        const iconColor = isOutgoing ? "text-red-400" : "text-green-400";
+
+                        let typeLabel = "Unknown";
+                        if (tx.type === "sent") typeLabel = "Sent";
+                        else if (tx.type === "received") typeLabel = "Received";
+                        else if (tx.type === "deposit") typeLabel = "Deposit";
+                        else if (tx.type === "withdraw") typeLabel = "Withdraw";
 
                         // Find token info
                         const tokenInfo = tokenBalances.find(
@@ -129,7 +144,7 @@ export function TransactionHistory({
                         const truncateAddress = (addr: string) =>
                             `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 
-                        const displayAddress = isSent ? tx.receiver : tx.sender;
+                        const displayAddress = isOutgoing ? tx.receiver : tx.sender;
                         const isCopied = copiedAddress === displayAddress;
 
                         return (
@@ -146,11 +161,11 @@ export function TransactionHistory({
                                     </div>
                                     <div>
                                         <div className="font-bold text-white text-sm">
-                                            {isSent ? "Sent" : "Received"}
+                                            {typeLabel}
                                         </div>
                                         <div className="flex items-center gap-2 text-xs text-white/40">
                                             <span>
-                                                {isSent ? "To" : "From"}{" "}
+                                                {isOutgoing ? "To" : "From"}{" "}
                                                 {truncateAddress(displayAddress)}
                                             </span>
                                             <button
@@ -174,7 +189,7 @@ export function TransactionHistory({
                                 </div>
                                 <div className="text-right">
                                     <div className="font-medium text-white text-sm">
-                                        {isSent ? "-" : "+"}
+                                        {isOutgoing ? "-" : "+"}
                                         {parseFloat(tx.amount).toFixed(4)} {tokenSymbol}
                                     </div>
                                     <div className="text-xs text-white/40">{timeAgo}</div>

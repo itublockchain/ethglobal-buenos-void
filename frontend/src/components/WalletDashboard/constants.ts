@@ -59,4 +59,16 @@ export const VOID_CONTRACT_ABI = [
     stateMutability: "nonpayable",
     type: "function",
   },
+  {
+    inputs: [
+      { internalType: "uint256", name: "amount", type: "uint256" },
+      { internalType: "address", name: "tokenAddress", type: "address" },
+      { internalType: "bytes32", name: "nonce", type: "bytes32" },
+      { internalType: "bytes32[]", name: "proof", type: "bytes32[]" },
+    ],
+    name: "emergencyWithdrawWithInclusive",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
 ] as const;
