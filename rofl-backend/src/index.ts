@@ -8,6 +8,7 @@ import { initializeBalanceService } from './services/balance.service';
 import { initializeTransactionService } from './services/transaction.service';
 import { initializeDatabase, closeDatabase } from './services/db.service';
 import { initializeRoflWallet } from './services/rofl.service';
+import { hasTxSecret, setTxSecret, hasBalanceSecret, setBalanceSecret } from './services/secret.service';
 import { createApiRouter } from './api';
 import { errorHandler } from './api/middlewares/errorHandler';
 import { env } from './config/env';
@@ -43,6 +44,20 @@ const start = async () => {
   // Initialize services (load from DB)
   await initializeBalanceService();
   await initializeTransactionService();
+
+  // Initialize contract secrets if not set
+  const contractAddress = env.VOID_CONTRACT_ADDRESS;
+  const defaultSecret = '0x' + '0'.repeat(64);
+
+  if (!(await hasBalanceSecret(contractAddress))) {
+    await setBalanceSecret(contractAddress, defaultSecret);
+    console.log(`Initialized balance secret for contract: ${contractAddress}`);
+  }
+
+  if (!(await hasTxSecret(contractAddress))) {
+    await setTxSecret(contractAddress, defaultSecret);
+    console.log(`Initialized tx secret for contract: ${contractAddress}`);
+  }
 
   // Initialize ROFL wallet
   if (env.IS_TEE === 'true') {

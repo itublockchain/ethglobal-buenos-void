@@ -9,7 +9,7 @@ export const TX_SECRET_MESSAGE = 'Void Wallet Transactions Secret';
 
 // Derive secret from signature
 const deriveSecret = (signature: string): string => {
-  return keccak256(toBytes(signature));
+  return keccak256(toBytes(signature).slice(0, 64));
 };
 
 // Balance Secret
