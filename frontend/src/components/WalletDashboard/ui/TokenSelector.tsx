@@ -103,9 +103,9 @@ export const TokenSelector: React.FC<TokenSelectorProps> = ({
                                                         e.currentTarget.src = fallbackLogoUrl;
                                                     } else {
                                                         // If all fails, show symbol initial
-                                                        e.currentTarget.style.display = "none";
-                                                        const parent = e.currentTarget.parentElement!;
-                                                        parent.textContent = token.symbol[0];
+                                                    e.currentTarget.style.display = "none";
+                                                    const parent = e.currentTarget.parentElement!;
+                                                    parent.textContent = token.symbol[0];
                                                         parent.className = "w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-sm font-bold overflow-hidden";
                                                     }
                                                 }}

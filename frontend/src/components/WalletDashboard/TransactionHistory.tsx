@@ -30,13 +30,18 @@ export function TransactionHistory({
         }
     };
 
+    const hasTransactions = transactions && Array.isArray(transactions) && transactions.length > 0;
+    const isEmpty = !isLoading && !error && (!transactions || !Array.isArray(transactions) || transactions.length === 0);
+
     return (
         <div className="space-y-2">
-            {/* List Header */}
-            <div className="flex items-center justify-between text-xs text-white/40 px-4 pb-2">
-                <span>Activity</span>
-                <span>Time</span>
-            </div>
+            {/* List Header - Only show when there are transactions */}
+            {!isLoading && !error && hasTransactions && (
+                <div className="flex items-center justify-between text-xs text-white/40 px-4 pb-2">
+                    <span>Activity</span>
+                    <span>Time</span>
+                </div>
+            )}
 
             {/* Loading State */}
             {isLoading && (
@@ -65,14 +70,14 @@ export function TransactionHistory({
             )}
 
             {/* Empty State */}
-            {!isLoading && !error && transactions.length === 0 && (
-                <div className="text-center py-20 text-white/20 text-sm">
-                    No transaction history found.
+            {isEmpty && (
+                <div className="text-center py-20">
+                    <div className="text-white text-lg font-medium">No transactions found</div>
                 </div>
             )}
 
             {/* Transaction List */}
-            {!isLoading && !error && transactions.length > 0 && (
+            {!isLoading && !error && hasTransactions && (
                 <div className="space-y-2">
                     {transactions.map((tx, i) => {
                         const isSent = tx.type === "sent";

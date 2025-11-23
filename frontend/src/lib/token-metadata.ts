@@ -7,94 +7,121 @@ export type TokenMetadata = {
   logo?: string;
 };
 
-// Cache key for localStorage
-const LOGO_CACHE_KEY = "token_logos_cache";
-const CACHE_VERSION = "v1";
-
-// Cache structure
-type LogoCache = {
-  version: string;
-  logos: Record<string, { url: string; timestamp: number }>;
-};
+// In-memory cache for token metadata (24 hour TTL)
+const metadataCache = new Map<
+  string,
+  { metadata: TokenMetadata; timestamp: number }
+>();
+const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
 
 /**
- * Get cached logo if available and not expired (7 days)
+ * Fetch token metadata from CoinGecko API by symbol
+ * Uses search endpoint to find token by symbol, then gets details
  */
-function getCachedLogo(symbol: string): string | null {
-  if (typeof window === "undefined") return null;
+async function fetchMetadataFromCoinGecko(
+  symbol: string
+): Promise<TokenMetadata | null> {
+  if (!symbol) {
+    return null;
+  }
 
   try {
-    const cached = localStorage.getItem(LOGO_CACHE_KEY);
-    if (!cached) return null;
+    // Search for token by symbol
+    const searchResponse = await fetch(
+      `https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(
+        symbol.toUpperCase()
+      )}`,
+      {
+        // Cache for 24 hours
+        next: { revalidate: 86400 },
+      }
+    );
 
-    const cache: LogoCache = JSON.parse(cached);
-    if (cache.version !== CACHE_VERSION) {
-      localStorage.removeItem(LOGO_CACHE_KEY);
+    if (!searchResponse.ok) {
       return null;
     }
 
-    const symbolLower = symbol.toLowerCase();
-    const entry = cache.logos[symbolLower];
+    const searchData = await searchResponse.json();
 
-    if (!entry) return null;
-
-    // Check if cache is still valid (7 days)
-    const sevenDays = 7 * 24 * 60 * 60 * 1000;
-    if (Date.now() - entry.timestamp > sevenDays) {
+    // Find the best match (prefer coins over tokens, prefer higher market cap)
+    const coins = searchData.coins || [];
+    if (coins.length === 0) {
       return null;
     }
 
-    return entry.url;
-  } catch {
+    // Get the first coin (usually the most popular one)
+    const coinId = coins[0]?.id;
+    if (!coinId) {
+      return null;
+    }
+
+    // Get detailed coin information
+    const detailResponse = await fetch(
+      `https://api.coingecko.com/api/v3/coins/${coinId}?localization=false&tickers=false&market_data=false&community_data=false&developer_data=false&sparkline=false`,
+      {
+        next: { revalidate: 86400 },
+      }
+    );
+
+    if (!detailResponse.ok) {
+      return null;
+    }
+
+    const detailData = await detailResponse.json();
+
+    // Get logo from image object
+    const logo =
+      detailData.image?.large ||
+      detailData.image?.small ||
+      detailData.image?.thumb ||
+      undefined;
+
+    // Get decimals from platform details (prefer Base, then Ethereum)
+    const decimals =
+      detailData.detail_platforms?.base?.decimal_place ||
+      detailData.detail_platforms?.ethereum?.decimal_place ||
+      undefined;
+
+    return {
+      name: detailData.name || undefined,
+      symbol: detailData.symbol?.toUpperCase() || symbol.toUpperCase(),
+      decimals: decimals,
+      logo: logo,
+    };
+  } catch (error) {
+    console.error("Failed to fetch token metadata from CoinGecko:", error);
     return null;
   }
 }
 
 /**
- * Cache logo URL for symbol
+ * Fetch token metadata from Alchemy API
+ * Uses alchemy_getTokenMetadata endpoint to get name, symbol, decimals, and logo
  */
-function cacheLogo(symbol: string, url: string): void {
-  if (typeof window === "undefined") return;
+async function fetchMetadataFromAlchemy(
+  tokenAddress: string
+): Promise<TokenMetadata | null> {
+  const alchemyApiKey = process.env.ALCHEMY_API_KEY;
 
-  try {
-    const cached = localStorage.getItem(LOGO_CACHE_KEY);
-    const cache: LogoCache = cached
-      ? JSON.parse(cached)
-      : { version: CACHE_VERSION, logos: {} };
-
-    cache.logos[symbol.toLowerCase()] = {
-      url,
-      timestamp: Date.now(),
-    };
-
-    localStorage.setItem(LOGO_CACHE_KEY, JSON.stringify(cache));
-  } catch {
-    // Silently fail if localStorage is full or unavailable
-  }
-}
-
-/**
- * Fetch token logo from CoinGecko API by symbol
- * CoinGecko has a free public API, no key needed
- */
-async function fetchLogoFromCoinGecko(symbol: string): Promise<string | null> {
-  // Check cache first (client-side only)
-  const cachedLogo = getCachedLogo(symbol);
-  if (cachedLogo) {
-    return cachedLogo;
+  if (!alchemyApiKey) {
+    return null;
   }
 
   try {
-    // CoinGecko search endpoint
-    const searchUrl = `https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(
-      symbol
-    )}`;
+    const alchemyUrl = `https://base-sepolia.g.alchemy.com/v2/${alchemyApiKey}`;
 
-    const response = await fetch(searchUrl, {
+    const response = await fetch(alchemyUrl, {
+      method: "POST",
       headers: {
-        Accept: "application/json",
+        "Content-Type": "application/json",
       },
-      // Cache for 24 hours (logos don't change often)
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        method: "alchemy_getTokenMetadata",
+        params: [tokenAddress],
+        id: 1,
+      }),
+      // Cache for 24 hours
       next: { revalidate: 86400 },
     });
 
@@ -104,55 +131,84 @@ async function fetchLogoFromCoinGecko(symbol: string): Promise<string | null> {
 
     const data = await response.json();
 
-    // Find exact symbol match (case insensitive)
-    const coin = data.coins?.find(
-      (c: any) => c.symbol?.toLowerCase() === symbol.toLowerCase()
-    );
-
-    if (coin?.large) {
-      const logoUrl = coin.large;
-      // Cache the logo
-      cacheLogo(symbol, logoUrl);
-      return logoUrl;
+    if (data.error) {
+      return null;
     }
 
-    return null;
+    const result = data.result;
+
+    return {
+      name: result.name || undefined,
+      symbol: result.symbol || undefined,
+      decimals: result.decimals !== null ? result.decimals : undefined,
+      logo: result.logo || undefined,
+    };
   } catch (error) {
     return null;
   }
 }
 
 /**
- * Fetch token metadata with logo from CoinGecko (server-side only)
- * Takes symbol from on-chain data and fetches logo from CoinGecko
+ * Fetch token metadata with logo from CoinGecko (primary) and Alchemy (fallback)
+ * Uses symbol for CoinGecko search, address for Alchemy
+ * Uses in-memory cache to avoid repeated API calls
  */
 export async function fetchTokenMetadata(
   tokenAddress: string,
   symbol?: string
 ): Promise<TokenMetadata | null> {
-  try {
-    // If we have symbol, fetch logo from CoinGecko
-    let logo: string | undefined;
+  // Use address as cache key to ensure each token address has its own cache entry
+  const cacheKey = tokenAddress.toLowerCase();
+  const now = Date.now();
 
+  // Check cache first
+  const cached = metadataCache.get(cacheKey);
+  if (cached && now - cached.timestamp < CACHE_TTL) {
+    return cached.metadata;
+  }
+
+  try {
+    let metadata: TokenMetadata | null = null;
+
+    // Try CoinGecko first using symbol (better logos and metadata)
     if (symbol) {
-      const coinGeckoLogo = await fetchLogoFromCoinGecko(symbol);
-      if (coinGeckoLogo) {
-        logo = coinGeckoLogo;
+      metadata = await fetchMetadataFromCoinGecko(symbol);
+    }
+
+    // Fallback to Alchemy if CoinGecko fails or no symbol provided
+    if (!metadata || !metadata.logo) {
+      const alchemyMetadata = await fetchMetadataFromAlchemy(tokenAddress);
+      if (alchemyMetadata) {
+        // Merge: prefer CoinGecko data, but use Alchemy if CoinGecko missing fields
+        metadata = {
+          ...metadata,
+          ...alchemyMetadata,
+          logo: metadata?.logo || alchemyMetadata.logo,
+        };
+      } else if (!metadata) {
+        // If both failed, use symbol as fallback
+        metadata = symbol ? { symbol: symbol.toUpperCase() } : null;
       }
     }
 
-    return {
-      symbol,
-      logo,
-    };
-  } catch {
+    // Cache the result by address
+    if (metadata) {
+      metadataCache.set(cacheKey, {
+        metadata,
+        timestamp: now,
+      });
+    }
+
+    return metadata;
+  } catch (error) {
+    console.error("Error in fetchTokenMetadata:", error);
     return null;
   }
 }
 
 /**
  * Fetch metadata for multiple tokens in parallel
- * Now uses CoinGecko API based on token symbols
+ * Uses Alchemy API for all tokens
  */
 export async function fetchMultipleTokenMetadata(
   tokens: Array<{ address: string; symbol?: string }>

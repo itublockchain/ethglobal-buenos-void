@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAccount, useReadContracts } from "wagmi";
 import { type Address, erc20Abi } from "viem";
 import { baseSepolia } from "viem/chains";
 import { formatTokenBalance } from "@/components/WalletDashboard/utils";
 import { VOID_CONTRACT_ADDRESS } from "@/components/WalletDashboard/constants";
 import { fetchMultipleTokenMetadata } from "@/lib/token-metadata";
+import { readPersistedAuthToken, decodeJWT } from "@/lib/sign/auth";
 
 export type TokenBalance = {
   address: Address;
@@ -18,35 +19,73 @@ export type TokenBalance = {
 };
 
 /**
- * Hook to automatically fetch ERC20 token balances from user's public wallet
- * Uses known Base Sepolia testnet tokens and fetches data on-chain
- * TODO: In production, fetch token list from backend API for better security
+ * Hook to automatically fetch ERC20 token balances from user's public wallet (Void Wallet)
+ * Uses Alchemy API to discover tokens in the public wallet address on Base Sepolia
  */
 export function usePublicWalletTokens() {
-  const { address } = useAccount();
+  const { address: connectedAddress } = useAccount();
+  const [publicWalletAddress, setPublicWalletAddress] =
+    useState<Address | null>(null);
   const [discoveredTokens, setDiscoveredTokens] = useState<Address[]>([]);
   const [tokenLogos, setTokenLogos] = useState<Map<string, string>>(new Map());
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  // Initialize known tokens
+  // Get public wallet address from JWT token
   useEffect(() => {
-    if (!address) {
+    const token = readPersistedAuthToken();
+    if (token) {
+      const payload = decodeJWT(token);
+      if (payload?.wallet) {
+        setPublicWalletAddress(payload.wallet as Address);
+      } else {
+        setPublicWalletAddress(null);
+      }
+    } else {
+      setPublicWalletAddress(null);
+    }
+  }, [refreshTrigger]);
+
+  // Discover all tokens in public wallet automatically using Alchemy
+  useEffect(() => {
+    if (!publicWalletAddress) {
       setDiscoveredTokens([]);
       setTokenLogos(new Map());
       return;
     }
 
-    // Use known Base Sepolia testnet tokens
-    const knownTokens = [
-      "0x036CbD53842c5426634e7929541eC2318f3dCF7e", // USDC
-      "0x808456652fdb597867f38412077A9182bf77359F", // EURC
-    ] as Address[];
+    const discoverTokens = async () => {
+      setIsDiscovering(true);
+      try {
+        const url = `/api/discover-tokens?walletAddress=${encodeURIComponent(
+          publicWalletAddress
+        )}`;
 
-    setDiscoveredTokens(knownTokens);
-  }, [address]);
+        const response = await fetch(url);
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch tokens: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const tokens = data.tokens || [];
+        setDiscoveredTokens(tokens);
+      } catch (err) {
+        console.error("Failed to discover tokens:", err);
+        setDiscoveredTokens([]);
+        setError("Failed to discover tokens");
+      } finally {
+        setIsDiscovering(false);
+      }
+    };
+
+    discoverTokens();
+  }, [publicWalletAddress, refreshTrigger]);
 
   // Fetch detailed info for discovered tokens
+  // Token list comes from public wallet (discovered via Alchemy)
+  // But balance and allowance come from connected wallet (user deposits from their own wallet)
   const { data: tokenData, isLoading: isLoadingDetails } = useReadContracts({
     contracts: discoveredTokens.flatMap((tokenAddress) => [
       {
@@ -65,14 +104,14 @@ export function usePublicWalletTokens() {
         address: tokenAddress,
         abi: erc20Abi,
         functionName: "balanceOf",
-        args: [address!],
+        args: [connectedAddress || publicWalletAddress!],
         chainId: baseSepolia.id,
       },
       {
         address: tokenAddress,
         abi: erc20Abi,
         functionName: "allowance",
-        args: [address!, VOID_CONTRACT_ADDRESS],
+        args: [connectedAddress || publicWalletAddress!, VOID_CONTRACT_ADDRESS],
         chainId: baseSepolia.id,
       },
       {
@@ -83,7 +122,10 @@ export function usePublicWalletTokens() {
       },
     ]),
     query: {
-      enabled: !!address && discoveredTokens.length > 0,
+      enabled:
+        !!publicWalletAddress &&
+        discoveredTokens.length > 0 &&
+        !!connectedAddress,
     },
   });
 
@@ -95,7 +137,6 @@ export function usePublicWalletTokens() {
       setIsDiscovering(true);
 
       try {
-        // Build array of { address, symbol } for CoinGecko
         const tokensWithSymbols = discoveredTokens
           .map((tokenAddress, index) => {
             const baseIndex = index * 5;
@@ -111,7 +152,6 @@ export function usePublicWalletTokens() {
           })
           .filter((t): t is { address: Address; symbol: string } => t !== null);
 
-        // Fetch logos from CoinGecko via Server Action (with cache)
         const metadata = await fetchMultipleTokenMetadata(tokensWithSymbols);
 
         const logos = new Map<string, string>();
@@ -184,7 +224,7 @@ export function usePublicWalletTokens() {
           ? (allowanceResult.result as bigint)
           : 0n;
 
-      // Get logo from Alchemy metadata
+      // Get logo from CoinGecko metadata
       const logo = tokenLogos.get(lowerAddress);
 
       return {
@@ -195,14 +235,19 @@ export function usePublicWalletTokens() {
         allowance,
         formattedBalance: formatTokenBalance(balance, decimals),
         name,
-        logo, // Logo from Alchemy or undefined (will fallback to getTokenLogoUrl)
+        logo, // Logo from CoinGecko or undefined (will fallback to getTokenLogoUrl)
       };
     })
     .filter((token) => token !== null) as TokenBalance[];
+
+  const refresh = useCallback(() => {
+    setRefreshTrigger((prev) => prev + 1);
+  }, []);
 
   return {
     tokens,
     isLoading: isDiscovering || isLoadingDetails,
     error,
+    refresh,
   };
 }

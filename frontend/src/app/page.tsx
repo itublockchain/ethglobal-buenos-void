@@ -16,17 +16,6 @@ import {
   clearAuthToken,
 } from "@/lib/sign/auth";
 
-const ACCOUNT_DATA = {
-  id: "1",
-  name: "Void Wallet",
-  address: "0x...", // This will be replaced by actual connected address
-  totalUsd: 2730.58,
-  assets: [
-    { symbol: "ETH", name: "Ether", amount: 1.504, value: 2707.34 },
-    { symbol: "USDC", name: "USDC", amount: 23.242, value: 23.24 },
-  ],
-};
-
 export default function Dashboard() {
   const router = useRouter();
   const { open } = useAppKit();
@@ -136,8 +125,11 @@ export default function Dashboard() {
   };
 
   const walletData = {
-    ...ACCOUNT_DATA,
-    address: address || ACCOUNT_DATA.address,
+    id: "1",
+    name: "Void Wallet",
+    address: address || "0x...",
+    totalUsd: 0,
+    assets: [],
   };
 
   if (!isConnected) {

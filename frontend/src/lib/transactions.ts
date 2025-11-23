@@ -18,16 +18,15 @@ type TransactionsApiResponse = {
 };
 
 export async function fetchWalletTransactions(): Promise<WalletTransaction[]> {
-  const baseUrl = process.env.NEXT_PUBLIC_VOID_API_BASE_URL;
-
-  if (!baseUrl) {
-    throw new Error("NEXT_PUBLIC_VOID_API_BASE_URL is not configured");
-  }
-
   const token = readPersistedAuthToken();
 
   if (!token) {
     throw new Error("No authentication token found. Please sign in first.");
+  }
+
+  const baseUrl = process.env.NEXT_PUBLIC_VOID_API_BASE_URL;
+  if (!baseUrl) {
+    throw new Error("NEXT_PUBLIC_VOID_API_BASE_URL is not configured");
   }
 
   const response = await fetch(`${baseUrl}/api/transactions`, {

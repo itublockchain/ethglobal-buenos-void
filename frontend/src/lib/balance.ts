@@ -51,7 +51,7 @@ function getCachedBalances(address: string): TokenBalance[] | null {
     if (!cached) return null;
 
     const cache: BalanceCache = JSON.parse(cached);
-    
+
     // Check version and address match
     if (cache.version !== CACHE_VERSION || cache.address.toLowerCase() !== address.toLowerCase()) {
       localStorage.removeItem(BALANCE_CACHE_KEY);
@@ -95,7 +95,7 @@ function cacheBalances(address: string, balances: TokenBalance[]): void {
  */
 export function clearBalanceCache(): void {
   if (typeof window === "undefined") return;
-  
+
   try {
     localStorage.removeItem(BALANCE_CACHE_KEY);
   } catch {
@@ -108,12 +108,6 @@ export function clearBalanceCache(): void {
  * Cache is stored for 5 minutes and includes ZK proofs
  */
 export async function fetchWalletBalances(forceRefresh = false): Promise<BalanceResponse> {
-  const baseUrl = process.env.NEXT_PUBLIC_VOID_API_BASE_URL;
-
-  if (!baseUrl) {
-    throw new Error("NEXT_PUBLIC_VOID_API_BASE_URL is not configured");
-  }
-
   const token = getAuthToken();
 
   if (!token) {
@@ -145,6 +139,11 @@ export async function fetchWalletBalances(forceRefresh = false): Promise<Balance
     "Content-Type": "application/json",
     Authorization: `Bearer ${token}`,
   };
+
+  const baseUrl = process.env.NEXT_PUBLIC_VOID_API_BASE_URL;
+  if (!baseUrl) {
+    throw new Error("NEXT_PUBLIC_VOID_API_BASE_URL is not configured");
+  }
 
   const response = await fetch(`${baseUrl}/api/balance`, {
     method: "GET",

@@ -130,7 +130,6 @@ export async function submitLoginSignature(
   }
 
   const baseUrl = process.env.NEXT_PUBLIC_VOID_API_BASE_URL;
-
   if (!baseUrl) {
     throw new Error("NEXT_PUBLIC_VOID_API_BASE_URL is not configured");
   }

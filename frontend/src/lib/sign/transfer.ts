@@ -88,7 +88,6 @@ export async function submitTransferSignature(
 
   const data = await response.json();
 
-  console.log("submitTransferSignature data", data, "payload", payload);
 
   return {
     success: true,
