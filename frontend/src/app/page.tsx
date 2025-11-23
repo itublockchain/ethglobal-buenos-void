@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { useAppKit } from "@reown/appkit/react";
-import { useAccount } from "wagmi";
+import { useAccount, useReadContract } from "wagmi";
+import { baseSepolia } from "viem/chains";
 import { PublicWallet } from "@/components/PublicWallet";
 import { SignMessageSection } from "@/components/SignMessageSection";
 import { WalletDashboard } from "@/components/WalletDashboard";
@@ -17,6 +18,10 @@ import {
   clearAuthToken,
 } from "@/lib/sign/auth";
 import { fetchWalletBalances } from "@/lib/balance";
+import {
+  VOID_CONTRACT_ADDRESS,
+  VOID_CONTRACT_ABI,
+} from "@/components/WalletDashboard/constants";
 
 export default function Dashboard() {
   const router = useRouter();
@@ -25,6 +30,18 @@ export default function Dashboard() {
   const [isAppLoading, setIsAppLoading] = useState(true);
   const [isSigned, setIsSigned] = useState(false);
   const [tokens, setTokens] = useState<any[]>([]);
+
+  // Read isTeeDead from contract
+  const { data: isTeeDead } = useReadContract({
+    address: VOID_CONTRACT_ADDRESS,
+    abi: VOID_CONTRACT_ABI,
+    functionName: "isTeeDead",
+    chainId: baseSepolia.id,
+    query: {
+      enabled: isConnected,
+      refetchInterval: 5000, // Check every 5 seconds
+    },
+  });
 
   // Memoize the onTokensUpdate callback to prevent infinite loops
   const tokensRef = useRef<any[]>([]);
@@ -187,10 +204,25 @@ export default function Dashboard() {
 
   return (
     <main className="flex min-h-screen w-full bg-black text-white overflow-hidden font-sans selection:bg-white/20">
+      {/* TEE Dead Warning Banner */}
+      {isTeeDead === true && (
+        <div className="fixed top-0 left-0 right-0 z-[10000] bg-red-600 text-white text-center py-3 px-4 animate-blink-red">
+          <div className="flex items-center justify-center gap-2">
+            <span className="font-semibold">
+              ⚠️ TEE IS DEAD - Emergency Mode Active
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* RIGHT MAIN CONTENT */}
       <section className="flex-1 flex flex-col relative bg-black">
         {/* Navbar / Top Section */}
-        <header className="flex items-center justify-between px-12 py-8 z-20 relative">
+        <header
+          className={`flex items-center justify-between px-12 z-20 relative ${
+            isTeeDead === true ? "pt-16" : "py-8"
+          }`}
+        >
           <div className="flex items-center">
             <Image
               src="/VoidWallet.svg"
@@ -203,7 +235,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-4">
             <NotificationMock />
             <PublicWallet isAppLoading={isAppLoading} />
-            {isSigned && (
+            {(isSigned || isTeeDead === true) && (
               <EmergencyExitDialog
                 tokens={tokens}
                 onSuccess={async () => {
