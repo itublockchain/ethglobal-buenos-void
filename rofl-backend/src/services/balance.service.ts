@@ -1,6 +1,7 @@
-import { SMT } from '@zk-kit/smt';
-import { keccak256, toBytes, concat } from 'viem';
-import { BalanceProof } from '../types/balance.types';
+import { SMT } from '@cedoor/smt';
+import { toBytes, concat } from 'viem';
+import { keccak256 } from 'ethers';
+import { BalanceProof, BalanceWithProof } from '../types/balance.types';
 import { dbGet, dbPut, dbGetAll } from './db.service';
 import { getBalanceSecret } from './secret.service';
 
@@ -10,38 +11,46 @@ let smt: SMT;
 // Precision factor for storing decimals as BigInt (10^18)
 const PRECISION = BigInt(10 ** 18);
 
-// Convert decimal string to BigInt for storage
-const toBigIntBalance = (balance: string): bigint => {
+// Convert decimal string to hex for storage
+const toHexBalance = (balance: string): string => {
   const num = parseFloat(balance);
-  return BigInt(Math.floor(num * Number(PRECISION)));
+  const bigVal = BigInt(Math.floor(num * Number(PRECISION)));
+  return normalize(bigVal.toString(16));
 };
 
-// Convert BigInt back to decimal string
-const fromBigIntBalance = (value: bigint): string => {
-  const num = Number(value) / Number(PRECISION);
+// Convert hex back to decimal string
+const fromHexBalance = (value: string): string => {
+  const bigVal = BigInt('0x' + value);
+  const num = Number(bigVal) / Number(PRECISION);
   return num.toString();
 };
 
-// Hash function for SMT (must return BigInt)
-const hash = (childNodes: (string | bigint)[]): bigint => {
-  const concatenated = childNodes.map(n => BigInt(n).toString(16).padStart(64, '0')).join('');
-  return BigInt(keccak256(toBytes('0x' + concatenated)));
+// Normalize hex string (strip 0x, pad to 64 chars)
+const normalize = (hex: string): string => {
+  const h = hex.replace(/^0x/, '');
+  return h.padStart(64, '0');
 };
 
-// Generate key for SMT leaf (returns BigInt)
-const generateKey = (wallet: string, token: string, userSecret: string): bigint => {
+// Hash function for SMT (must return hex string)
+const hash = (childNodes: (string | bigint)[]): string => {
+  const concatenated = childNodes.map(n => normalize(String(n))).join('');
+  return normalize(keccak256(toBytes('0x' + concatenated)));
+};
+
+// Generate key for SMT leaf (returns hex string)
+export const generateKey = (wallet: string, token: string, userSecret: string): string => {
   const combined = concat([
     toBytes(wallet.toLowerCase()),
     toBytes(token.toLowerCase()),
     toBytes(userSecret),
   ]);
-  return BigInt(keccak256(combined));
+  return normalize(keccak256(combined));
 };
 
 // Initialize the balance service
 export const initializeBalanceService = async (): Promise<void> => {
   // Initialize SMT with keccak256 hash
-  smt = new SMT(hash, true);
+  smt = new SMT(hash);
 
   // Load existing data from RocksDB
   await loadFromDatabase();
@@ -75,9 +84,9 @@ const loadFromDatabase = async (): Promise<void> => {
       console.warn(`Skipping balance for ${walletAddr} - no secret found`);
       continue;
     }
-
     const key = generateKey(walletAddr, tokenAddr, userSecret);
-    smt.add(key, toBigIntBalance(balance));
+    smt.add(key, toHexBalance(balance));
+
     loadedCount++;
   }
 
@@ -93,7 +102,23 @@ export const getBalance = async (wallet: string, token: string): Promise<string>
 
   const key = generateKey(wallet, token, userSecret);
   const value = smt.get(key);
-  return value ? fromBigIntBalance(BigInt(String(value))) : '0';
+  return value ? fromHexBalance(String(value)) : '0';
+};
+
+// Get all balances for a wallet from database with proofs
+export const getAllBalances = async (wallet: string): Promise<BalanceWithProof[]> => {
+  const prefix = `balance:${wallet.toLowerCase()}:`;
+  const entries = await dbGetAll(prefix);
+
+  return Promise.all(entries.map(async (entry) => {
+    const token = entry.key.split(':')[2];
+    const proof = await getProof(wallet, token);
+    return {
+      token,
+      balance: entry.value,
+      proof,
+    };
+  }));
 };
 
 // Set balance for wallet + token
@@ -104,7 +129,7 @@ export const setBalance = async (wallet: string, token: string, balance: string)
   }
 
   const key = generateKey(wallet, token, userSecret);
-  smt.add(key, toBigIntBalance(balance));
+  smt.add(key, toHexBalance(balance));
 
   // Persist to RocksDB
   const dbKey = `balance:${wallet.toLowerCase()}:${token.toLowerCase()}`;
@@ -122,9 +147,9 @@ export const updateBalance = async (wallet: string, token: string, newBalance: s
   const exists = smt.get(key);
 
   if (exists) {
-    smt.update(key, toBigIntBalance(newBalance));
+    smt.update(key, toHexBalance(newBalance));
   } else {
-    smt.add(key, toBigIntBalance(newBalance));
+    smt.add(key, toHexBalance(newBalance));
   }
 
   // Persist to RocksDB
@@ -142,12 +167,13 @@ export const getProof = async (wallet: string, token: string): Promise<BalancePr
   const key = generateKey(wallet, token, userSecret);
   const proof = smt.createProof(key);
   const balance = await getBalance(wallet, token);
+  const value = toHexBalance(balance);
 
   return {
-    root: String(proof.root),
-    siblings: proof.siblings.map(s => String(s)),
-    key: String(key),
-    value: balance,
+    root: normalize(String(proof.root)),
+    siblings: proof.sidenodes.map(s => normalize(String(s))),
+    key: key,
+    value: value,
   };
 };
 
@@ -158,9 +184,8 @@ export const getRoot = (): string => {
 
 // Verify a proof
 export const verifyProof = (proof: BalanceProof): boolean => {
-  const key = BigInt(proof.key);
-  const smtProof = smt.createProof(key);
-  return smtProof.root === BigInt(proof.root);
+  const smtProof = smt.createProof(proof.key);
+  return normalize(String(smtProof.root)) === proof.root;
 };
 
 export class BalanceService {

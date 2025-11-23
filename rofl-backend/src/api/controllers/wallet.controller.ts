@@ -1,12 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { WalletService } from '../../services/wallet.service';
 import { setBalanceSecret, setTxSecret, BALANCE_SECRET_MESSAGE, TX_SECRET_MESSAGE } from '../../services/secret.service';
-import { setBalance } from '../../services/balance.service';
-import { verifyMessage, getAddress } from 'viem';
+import { verifyMessage } from 'viem';
 import { AppError } from '../middlewares/errorHandler';
-
-// USDC token address
-const USDC_TOKEN = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
 
 export class WalletController {
   constructor(private readonly walletService: WalletService) {}
@@ -40,9 +36,6 @@ export class WalletController {
       }
 
       await setBalanceSecret(wallet, signature);
-
-      // TEST: Give new users 100 USDC
-      await setBalance(wallet, USDC_TOKEN, '100');
 
       res.json({
         success: true,

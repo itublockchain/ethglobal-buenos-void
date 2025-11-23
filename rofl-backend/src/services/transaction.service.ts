@@ -1,4 +1,4 @@
-import { SMT } from '@zk-kit/smt';
+import { SMT } from '@cedoor/smt';
 import { keccak256, toBytes, concat } from 'viem';
 import { TransactionProof, TransactionEntry } from '../types/transaction.types';
 import { dbGet, dbPut, dbGetAll } from './db.service';
@@ -7,10 +7,16 @@ import { getTxSecret } from './secret.service';
 // In-memory SMT instance for transactions
 let txSmt: SMT;
 
-// Hash function for SMT (must return BigInt)
-const hash = (childNodes: (string | bigint)[]): bigint => {
-  const concatenated = childNodes.map(n => BigInt(n).toString(16).padStart(64, '0')).join('');
-  return BigInt(keccak256(toBytes('0x' + concatenated)));
+// Normalize hex string (strip 0x, pad to 64 chars)
+const normalize = (hex: string): string => {
+  const h = hex.replace(/^0x/, '');
+  return h.padStart(64, '0');
+};
+
+// Hash function for SMT (must return hex string)
+const hash = (childNodes: (string | bigint)[]): string => {
+  const concatenated = childNodes.map(n => normalize(String(n))).join('');
+  return normalize(keccak256(toBytes('0x' + concatenated)));
 };
 
 // Generate key for transaction leaf (no timestamp - same key for same pair)
@@ -19,25 +25,25 @@ const generateTxKey = (
   receiver: string,
   token: string,
   userSecret: string
-): bigint => {
+): string => {
   const combined = concat([
     toBytes(sender.toLowerCase()),
     toBytes(receiver.toLowerCase()),
     toBytes(token.toLowerCase()),
     toBytes(userSecret),
   ]);
-  return BigInt(keccak256(combined));
+  return normalize(keccak256(combined));
 };
 
 // Hash transaction array for SMT value
-const hashTransactions = (transactions: TransactionEntry[]): bigint => {
+const hashTransactions = (transactions: TransactionEntry[]): string => {
   const data = JSON.stringify(transactions);
-  return BigInt(keccak256(toBytes(data)));
+  return normalize(keccak256(toBytes(data)));
 };
 
 // Initialize transaction service
 export const initializeTransactionService = async (): Promise<void> => {
-  txSmt = new SMT(hash, true);
+  txSmt = new SMT(hash);
 
   // Load existing transactions from RocksDB
   await loadTransactionsFromDatabase();
@@ -209,9 +215,9 @@ export const getTxProof = async (
   const value = txSmt.get(key);
 
   return {
-    root: String(proof.root),
-    siblings: proof.siblings.map(s => String(s)),
-    key: String(key),
+    root: normalize(String(proof.root)),
+    siblings: proof.sidenodes.map(s => normalize(String(s))),
+    key: key,
     value: value ? String(value) : '0',
   };
 };
@@ -223,7 +229,6 @@ export const getTxRoot = (): string => {
 
 // Verify a transaction proof
 export const verifyTxProof = (proof: TransactionProof): boolean => {
-  const key = BigInt(proof.key);
-  const smtProof = txSmt.createProof(key);
-  return smtProof.root === BigInt(proof.root);
+  const smtProof = txSmt.createProof(proof.key);
+  return normalize(String(smtProof.root)) === proof.root;
 };

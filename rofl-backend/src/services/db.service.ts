@@ -30,9 +30,11 @@ export const closeDatabase = async (): Promise<void> => {
 export const dbGet = async (key: string): Promise<string | null> => {
   if (!db) throw new Error('Database not initialized');
   try {
-    return await db.get(key);
+    const value = await db.get(key);
+    return value;
   } catch (error: any) {
-    if (error.notFound) return null;
+    console.log('DB get error:', error.code, error.type, error.notFound, error.message);
+    if (error.notFound || error.code === 'LEVEL_NOT_FOUND') return null;
     throw error;
   }
 };

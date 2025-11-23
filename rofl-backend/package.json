@@ -14,7 +14,7 @@
   "description": "",
   "dependencies": {
     "@types/express": "^5.0.5",
-    "@zk-kit/smt": "^1.0.2",
+    "@cedoor/smt": "^0.1.7",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "ethers": "^6.15.0",
