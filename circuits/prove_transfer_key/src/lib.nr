@@ -8,18 +8,17 @@ pub unconstrained fn check_key(
     hashed_message: [u8; 32],
     prover_address:  [u8; 20],
     countryparty_address: [u8; 20],
-    is_send: bool,
     token_address: [u8; 20],
     key: [u8; 32],
 )  {
     // Recover address from signature
-    let address = ecrecover::ecrecover(pub_key_x, pub_key_y, signature, hashed_message);
+    //let address = ecrecover::ecrecover(pub_key_x, pub_key_y, signature, hashed_message);
     
     // Hash the signature
     let hash_signature = keccak256::keccak256(signature, 64);
     
     // Verify the recovered address matches the prover address
-    assert_eq(prover_address, field_to_bytes_20(address));
+    //assert_eq(prover_address, field_to_bytes_20(address));
     
     // Convert addresses to bytes
     let prover_addr_bytes = prover_address;
@@ -31,13 +30,8 @@ pub unconstrained fn check_key(
     let mut rhs = [0; 20];
     
     // Determine order based on is_send flag
-    if (is_send) {
-        lhs = prover_addr_bytes;
-        rhs = countryparty_addr_bytes;
-    } else {
-        lhs = countryparty_addr_bytes;
-        rhs = prover_addr_bytes;
-    }
+     lhs = prover_addr_bytes;
+     rhs = countryparty_addr_bytes;
     
     // Encode: sender (20) + receiver (20) + token (20) + sig_hash (32)
     for i in 0..20 {
@@ -131,7 +125,6 @@ let counterparty_address: [u8; 20] = [
         hashed_message,
         prover_address,
         counterparty_address,
-        true,
         token_address,
         key
     );

@@ -1,19 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useAppKit } from "@reown/appkit/react";
 import { useAccount, useSignMessage } from "wagmi";
 import { PublicWallet } from "@/components/PublicWallet";
-import { Settings, CheckCircle2 } from "lucide-react";
+import { Settings, CheckCircle2, Copy, Check } from "lucide-react";
 import { hashMessage, keccak256, concat, getBytes, toBeHex } from "ethers";
 import {
   createLowerProof,
   verifyProof as verifyProofAPI,
-  createTransferKey,
-} from "@/lib/compliance/proof";
+  deserializePublicInputsFromProof,
+} from "@/hooks/useCreateLowerProof";
+import { createTransferKey } from "@/lib/utils";
 
 export default function CompliancePage() {
   const { open } = useAppKit();
@@ -31,6 +31,7 @@ export default function CompliancePage() {
   const [proofData, setProofData] = useState<any>(null);
   const [isSigning, setIsSigning] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   // Proof Verify states
   const [verifyReceiver, setVerifyReceiver] = useState("");
@@ -52,6 +53,18 @@ export default function CompliancePage() {
     amount.trim() !== "" &&
     tokenAddress.trim() !== "" &&
     threshold.trim() !== "";
+
+  const handleCopyProof = async () => {
+    if (proof) {
+      try {
+        await navigator.clipboard.writeText(proof);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch (err) {
+        console.error("Failed to copy:", err);
+      }
+    }
+  };
 
   const handleGenerateProof = async () => {
     if (!isConnected || !address || !signMessageAsync) {
@@ -76,9 +89,12 @@ export default function CompliancePage() {
         const message = "Void Wallet Transfers Secret";
         const signedMessage = await signMessageAsync({ message });
         setSignature(signedMessage);
+        setIsSigning(false);
       } else {
         // If signature exists, generate proof
         setIsGenerating(true);
+        setIsSigning(false);
+
         try {
           const message = "Void Wallet Transfers Secret";
           const hashed_message = hashMessage(message);
@@ -103,13 +119,15 @@ export default function CompliancePage() {
             signature
           );
 
-          // Create combined values for leaf hash
-          const combinedValuesArray = values
-            .map((v) => {
-              const hex = v.toString(16).padStart(64, "0");
-              return Array.from(getBytes(`0x${hex}`));
-            })
-            .flat();
+          // Create combined values for leaf hash - FIXED: Check if values is an array
+          const combinedValuesArray = Array.isArray(values)
+            ? values
+                .map((v) => {
+                  const hex = v.toString(16).padStart(64, "0");
+                  return Array.from(getBytes(`0x${hex}`));
+                })
+                .flat()
+            : [];
 
           const combinedValues = Uint8Array.from(combinedValuesArray);
 
@@ -131,16 +149,15 @@ export default function CompliancePage() {
             receiver,
             tokenAddress
           );
+          console.log("Generated proof:", proofResult);
 
           setProofData(proofResult);
-          setProof(JSON.stringify(proofResult));
+          setProof(JSON.stringify(proofResult, null, 2));
         } catch (error) {
           console.error("Failed to generate proof:", error);
-          // Fallback to mock proof if API fails
-          const mockHash = `0x${Array.from({ length: 64 }, () =>
-            Math.floor(Math.random() * 16).toString(16)
-          ).join("")}`;
-          setProof(mockHash);
+          alert(
+            "Failed to generate proof. Please check the console for details."
+          );
         } finally {
           setIsGenerating(false);
         }
@@ -148,12 +165,15 @@ export default function CompliancePage() {
     } catch (error) {
       console.error("Failed to sign message:", error);
     } finally {
-      setIsSigning(false);
+      if (!signature) {
+        setIsSigning(false);
+      }
     }
   };
 
   const handleVerifyProof = async () => {
     if (!verifyProof.trim()) {
+      alert("Please paste a proof to verify");
       return;
     }
 
@@ -164,19 +184,50 @@ export default function CompliancePage() {
       let proofObj;
       try {
         proofObj = JSON.parse(verifyProof);
-      } catch {
-        throw new Error("Invalid proof format");
+      } catch (parseError) {
+        console.error("Parse error:", parseError);
+        throw new Error("Invalid proof format - must be valid JSON");
       }
 
-      const isValid = await verifyProofAPI(
-        proofObj.proof,
-        proofObj.publicInputs
-      );
+      // Deserialize public inputs to fill the form fields
+      try {
+        const publicInputs = deserializePublicInputsFromProof(
+          proofObj.publicInputs
+        );
+
+        // Fill the verification form fields
+        setVerifyReceiver(publicInputs.countryparty_address || "");
+        setVerifyAmount(
+          publicInputs.pairwise_value
+            ? (Number(publicInputs.pairwise_value) / 1e18).toString()
+            : ""
+        );
+        setVerifyTokenAddress(publicInputs.token_address || "");
+
+        // Calculate threshold from the pairwise_value (approximate)
+        const thresholdApprox = publicInputs.pairwise_value
+          ? (Number(publicInputs.pairwise_value) / 1e18).toString()
+          : "";
+        setVerifyThreshold(thresholdApprox);
+      } catch (deserializeError) {
+        console.error("Deserialization error:", deserializeError);
+        // Continue with verification even if deserialization fails
+      }
+
+      console.log("Verifying proof:", proofObj);
+
+      const isValid = await verifyProofAPI(proofObj);
+      console.log("Verification result:", isValid);
 
       setVerificationResult(isValid);
       setVerifyProofData(proofObj);
     } catch (error) {
       console.error("Failed to verify proof:", error);
+      alert(
+        `Verification failed: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
       setVerificationResult(false);
     } finally {
       setIsVerifying(false);
@@ -198,13 +249,7 @@ export default function CompliancePage() {
       {/* Navbar */}
       <header className="flex items-center justify-between px-12 py-6 z-20 relative border-b border-white/10">
         <div className="flex items-center">
-          <Image
-            src="/VoidWallet.svg"
-            alt="Void Wallet"
-            width={280}
-            height={60}
-            className="h-10 w-auto"
-          />
+          <div className="text-2xl font-bold tracking-wider">VOID WALLET</div>
         </div>
         <div className="flex items-center gap-4">
           {isConnected ? (
@@ -334,9 +379,31 @@ export default function CompliancePage() {
 
                 {/* Proof */}
                 <div className="space-y-2">
-                  <label className="text-xs uppercase tracking-[0.15em] text-white/70 font-medium">
-                    Proof
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs uppercase tracking-[0.15em] text-white/70 font-medium">
+                      Proof
+                    </label>
+                    {proof && (
+                      <Button
+                        onClick={handleCopyProof}
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs hover:bg-white/10"
+                      >
+                        {copied ? (
+                          <>
+                            <Check className="w-3 h-3 mr-1" />
+                            Copied
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3 mr-1" />
+                            Copy
+                          </>
+                        )}
+                      </Button>
+                    )}
+                  </div>
                   <textarea
                     value={proof}
                     disabled
@@ -430,7 +497,7 @@ export default function CompliancePage() {
                     type="text"
                     value={verifyReceiver}
                     onChange={(e) => setVerifyReceiver(e.target.value)}
-                    placeholder="0x..."
+                    placeholder="Auto-filled from proof"
                     className="h-11 bg-white/[0.03] border-white/10 text-white placeholder:text-white/30 focus:bg-white/[0.08] focus:border-white/30 rounded-none transition-all duration-200 font-mono text-xs hover:border-white/15"
                   />
                 </div>
@@ -448,7 +515,7 @@ export default function CompliancePage() {
                         setVerifyAmount(e.target.value);
                       }
                     }}
-                    placeholder="0.00"
+                    placeholder="Auto-filled from proof"
                     className="h-11 bg-white/[0.03] border-white/10 text-white placeholder:text-white/30 focus:bg-white/[0.08] focus:border-white/30 rounded-none transition-all duration-200 hover:border-white/15 text-xs"
                   />
                 </div>
@@ -462,7 +529,7 @@ export default function CompliancePage() {
                     type="text"
                     value={verifyTokenAddress}
                     onChange={(e) => setVerifyTokenAddress(e.target.value)}
-                    placeholder="0x..."
+                    placeholder="Auto-filled from proof"
                     className="h-11 bg-white/[0.03] border-white/10 text-white placeholder:text-white/30 focus:bg-white/[0.08] focus:border-white/30 rounded-none transition-all duration-200 font-mono text-xs hover:border-white/15"
                   />
                 </div>
@@ -480,7 +547,7 @@ export default function CompliancePage() {
                         setVerifyThreshold(e.target.value);
                       }
                     }}
-                    placeholder="Amount threshold for compliance check"
+                    placeholder="Auto-filled from proof"
                     className="h-11 bg-white/[0.03] border-white/10 text-white placeholder:text-white/30 focus:bg-white/[0.08] focus:border-white/30 rounded-none transition-all duration-200 hover:border-white/15 text-xs"
                   />
                 </div>

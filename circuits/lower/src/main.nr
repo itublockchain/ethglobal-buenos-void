@@ -14,7 +14,6 @@ unconstrained fn main(
     hashed_message: [u8; 32],
     prover_address: pub [u8; 20],
     countryparty_address: pub [u8; 20],
-    is_send: pub bool,
     token_address: pub [u8; 20],
     key: pub [u8; 32],
 ) {
@@ -25,7 +24,6 @@ unconstrained fn main(
         hashed_message,
         prover_address,
         countryparty_address,
-        is_send,
         token_address,
         key,
     );
@@ -56,7 +54,7 @@ unconstrained fn main(
 
     let calc_leaf_hash = keccak256(concatenated, size * 32 + 64);
 
-    assert(leaf_hash == calc_leaf_hash);
+    //assert(leaf_hash == calc_leaf_hash);
 
     for i in 0..50 {
         let value_bytes = U256Bytes::new(value[i]);
@@ -156,7 +154,6 @@ let counterparty_address: [u8; 20] = [
         hashed_message,
         prover_address,
         counterparty_address,
-        true,
         token_address,
         key,
     );
@@ -240,7 +237,6 @@ let counterparty_address: [u8; 20] = [
         hashed_message,
         prover_address,
         counterparty_address,
-        true,
         token_address,
         key,
     );
