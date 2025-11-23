@@ -227,7 +227,7 @@ export function SendTokenDialog({
                                                 placeholder="Search assets..."
                                                 value={searchQuery}
                                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                                className="h-12 bg-white/5 border-white/10 pl-10 text-sm text-white placeholder:text-white/20 rounded-xl focus:bg-white/10 transition-all"
+                                                className="h-12 bg-white/5 border-white/10 pl-10 text-sm text-white placeholder:text-white/20 focus:bg-white/10 transition-all"
                                             />
                                         </div>
                                         <div className="space-y-2">
@@ -236,7 +236,7 @@ export function SendTokenDialog({
                                             </label>
                                             <div className="grid gap-3">
                                                 {filteredTokens.length === 0 ? (
-                                                    <div className="text-center py-10 border border-dashed border-white/10 rounded-2xl bg-white/[0.02]">
+                                                    <div className="text-center py-10 border border-dashed border-white/10 bg-white/[0.02]">
                                                         <span className="text-sm text-white/40 font-light">
                                                             No assets found
                                                         </span>
@@ -258,7 +258,7 @@ export function SendTokenDialog({
                                                                     backgroundColor: "rgba(255,255,255,0.08)",
                                                                 }}
                                                                 whileTap={{ scale: 0.99 }}
-                                                                className="flex items-center justify-between p-4 rounded-2xl border border-white/5 bg-white/5 text-white hover:border-white/20 transition-all duration-300 group w-full"
+                                                                className="flex items-center justify-between p-4 rounded-none border border-white/5 bg-white/5 text-white hover:border-white/20 transition-all duration-300 group w-full"
                                                             >
                                                                 <div className="flex items-center gap-4">
                                                                     <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center overflow-hidden">
@@ -300,7 +300,7 @@ export function SendTokenDialog({
                                 {/* Step 2: Details */}
                                 {currentStep === 2 && (
                                     <div className="space-y-6">
-                                        <div className="flex items-center gap-3 p-4 bg-white/5 rounded-2xl border border-white/5">
+                                        <div className="flex items-center gap-3 p-4 bg-white/5 rounded-none border border-white/5">
                                             <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center overflow-hidden">
                                                 {selectedToken?.address &&
                                                     getTokenLogoUrl(selectedToken.address) ? (
@@ -325,7 +325,7 @@ export function SendTokenDialog({
                                                 variant="ghost"
                                                 size="sm"
                                                 onClick={() => setCurrentStep(1)}
-                                                className="ml-auto text-xs text-white/40 hover:text-white"
+                                                className="ml-auto text-xs text-white/40 hover:text-white rounded-none"
                                             >
                                                 Change
                                             </Button>
@@ -340,7 +340,7 @@ export function SendTokenDialog({
                                                     placeholder="0x..."
                                                     value={recipientAddress}
                                                     onChange={(e) => setRecipientAddress(e.target.value)}
-                                                    className="h-14 bg-black/40 border border-white/10 focus:border-white/50 text-sm font-light px-4 rounded-xl text-white"
+                                                    className="h-14 bg-black/40 border border-white/10 focus:border-white/50 text-sm font-light px-4 rounded-none text-white"
                                                 />
                                             </div>
                                             <div className="space-y-2">
@@ -352,7 +352,7 @@ export function SendTokenDialog({
                                                         onClick={() =>
                                                             setAmount(selectedToken?.amount.toString() || "")
                                                         }
-                                                        className="text-[10px] bg-white/10 hover:bg-white text-white hover:text-black px-3 py-1 rounded-full transition-all uppercase tracking-wider font-medium"
+                                                        className="text-[10px] bg-white/10 hover:bg-white text-white hover:text-black px-3 py-1 rounded-none transition-all uppercase tracking-wider font-medium"
                                                     >
                                                         Max: {selectedToken?.amount.toFixed(6)}
                                                     </button>
@@ -364,7 +364,7 @@ export function SendTokenDialog({
                                                         /^\d*\.?\d*$/.test(e.target.value) &&
                                                         setAmount(e.target.value)
                                                     }
-                                                    className="h-20 bg-black/40 border border-white/10 focus:border-white/50 text-4xl font-light pl-6 rounded-2xl text-white"
+                                                    className="h-20 bg-black/40 border border-white/10 focus:border-white/50 text-4xl font-light pl-6 rounded-none text-white"
                                                 />
                                                 {insufficient && (
                                                     <div className="text-xs text-red-400 px-2">
@@ -387,7 +387,7 @@ export function SendTokenDialog({
                                                 Review your transaction details
                                             </p>
                                         </div>
-                                        <div className="w-full bg-white/5 rounded-2xl p-6 border border-white/5 space-y-4">
+                                        <div className="w-full bg-white/5 rounded-none p-6 border border-white/5 space-y-4">
                                             <div className="flex justify-between items-center">
                                                 <span className="text-white/40 text-xs uppercase tracking-wider">
                                                     Asset
@@ -438,13 +438,13 @@ export function SendTokenDialog({
                                         variant="ghost"
                                         onClick={() => setCurrentStep((c) => c - 1)}
                                         disabled={isSending || sendSuccess}
-                                        className="h-12 px-6 text-white/40 hover:text-white uppercase tracking-widest text-xs font-medium rounded-xl"
+                                        className="h-12 px-6 text-white/40 hover:text-white uppercase tracking-widest text-xs font-medium rounded-none"
                                     >
                                         Back
                                     </Button>
                                 )}
                                 <Button
-                                    className="flex-1 h-12 bg-white text-black hover:bg-white/90 uppercase tracking-[0.2em] text-xs font-bold rounded-xl"
+                                    className="flex-1 h-12 bg-white text-black hover:bg-white/90 uppercase tracking-[0.2em] text-xs font-bold"
                                     onClick={() => {
                                         if (currentStep === 1) return;
                                         if (currentStep === 2) setCurrentStep(3);
@@ -461,7 +461,7 @@ export function SendTokenDialog({
                                         ? "Review"
                                         : isSending
                                             ? "Sending..."
-                                            : "Send Transaction"}
+                                            : "Send "}
                                 </Button>
                             </div>
                         </div>

@@ -19,6 +19,7 @@ interface TokenSelectorProps {
     // optional search – for DepositDialog we don't need it, but we keep the prop for reuse
     searchable?: boolean;
     isLoading?: boolean;
+    sharpCorners?: boolean;
 }
 
 export const TokenSelector: React.FC<TokenSelectorProps> = ({
@@ -27,6 +28,7 @@ export const TokenSelector: React.FC<TokenSelectorProps> = ({
     onSelect,
     searchable = false,
     isLoading = false,
+    sharpCorners = false,
 }) => {
     const [searchQuery, setSearchQuery] = React.useState("");
 
@@ -46,7 +48,7 @@ export const TokenSelector: React.FC<TokenSelectorProps> = ({
                         placeholder="Search assets..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="h-12 pl-10 bg-white/5 border-white/10 text-sm text-white placeholder:text-white/20 rounded-xl focus:bg-white/10"
+                        className={`h-12 pl-10 bg-white/5 border-white/10 text-sm text-white placeholder:text-white/20 focus:bg-white/10 ${sharpCorners ? "rounded-none" : "rounded-xl"}`}
                     />
                 </div>
             )}
@@ -56,7 +58,7 @@ export const TokenSelector: React.FC<TokenSelectorProps> = ({
                         {[1, 2, 3].map((i) => (
                             <div
                                 key={i}
-                                className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 animate-pulse"
+                                className={`flex items-center justify-between p-4 bg-white/5 border border-white/5 animate-pulse ${sharpCorners ? "rounded-none" : "rounded-2xl"}`}
                             >
                                 <div className="flex items-center gap-4">
                                     <div className="w-10 h-10 rounded-full bg-white/10" />
@@ -69,7 +71,7 @@ export const TokenSelector: React.FC<TokenSelectorProps> = ({
                         ))}
                     </>
                 ) : filtered.length === 0 ? (
-                    <div className="text-center py-10 border border-dashed border-white/10 rounded-2xl bg-white/[0.02]">
+                    <div className={`text-center py-10 border border-dashed border-white/10 bg-white/[0.02] ${sharpCorners ? "rounded-none" : "rounded-2xl"}`}>
                         <span className="text-sm text-white/40 font-light">No assets found</span>
                     </div>
                 ) : (
@@ -78,14 +80,14 @@ export const TokenSelector: React.FC<TokenSelectorProps> = ({
                         // Prioritize Alchemy logo, fallback to getTokenLogoUrl
                         const logoUrl = token.logo || getTokenLogoUrl(token.address);
                         const fallbackLogoUrl = token.logo ? getTokenLogoUrl(token.address) : "";
-                        
+
                         return (
                             <motion.button
                                 key={token.address}
                                 onClick={() => onSelect(token.address)}
                                 whileHover={{ scale: 1.01, backgroundColor: isSelected ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.08)" }}
                                 whileTap={{ scale: 0.99 }}
-                                className={`relative flex items-center justify-between p-4 rounded-2xl border transition-all duration-300 group ${isSelected
+                                className={`relative flex items-center justify-between p-4 border transition-all duration-300 group ${sharpCorners ? "rounded-none" : "rounded-2xl"} ${isSelected
                                     ? "bg-white/10 border-white text-white shadow-[0_0_30px_rgba(255,255,255,0.1)]"
                                     : "bg-white/5 border-white/5 text-white hover:border-white/20"
                                     }`}
@@ -103,9 +105,9 @@ export const TokenSelector: React.FC<TokenSelectorProps> = ({
                                                         e.currentTarget.src = fallbackLogoUrl;
                                                     } else {
                                                         // If all fails, show symbol initial
-                                                    e.currentTarget.style.display = "none";
-                                                    const parent = e.currentTarget.parentElement!;
-                                                    parent.textContent = token.symbol[0];
+                                                        e.currentTarget.style.display = "none";
+                                                        const parent = e.currentTarget.parentElement!;
+                                                        parent.textContent = token.symbol[0];
                                                         parent.className = "w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-sm font-bold overflow-hidden";
                                                     }
                                                 }}

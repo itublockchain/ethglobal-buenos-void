@@ -26,6 +26,7 @@ import { DepositDialog } from "./DepositDialog";
 import { SendTokenDialog } from "./SendTokenDialog";
 import { TokenList } from "./TokenList";
 import { TransactionHistory } from "./TransactionHistory";
+import { WithdrawDialog } from "./WithdrawDialog";
 
 export function WalletDashboard({ wallet }: WalletDashboardProps) {
   const [activeTab, setActiveTab] = useState<"tokens" | "history">("tokens");
@@ -298,28 +299,11 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
         <DepositDialog onSuccess={handleDepositSuccess} />
 
         {/* Withdraw */}
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button
-              variant="outline"
-              className="h-14 border-white/10 bg-white/5 hover:bg-white hover:text-black hover:border-white transition-all text-base uppercase tracking-wider font-medium group cursor-pointer"
-            >
-              <ArrowUpRight className="mr-2 w-4 h-4 group-hover:scale-110 transition-transform" />
-              Withdraw
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="bg-[#0A0A0A] border-white/10 text-white">
-            <DialogHeader>
-              <DialogTitle>Withdraw Funds</DialogTitle>
-              <DialogDescription className="text-white/60">
-                Withdraw funds from your Void Wallet account.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="py-6 text-center text-white/40 text-sm">
-              Withdraw functionality coming soon.
-            </div>
-          </DialogContent>
-        </Dialog>
+        {/* Withdraw */}
+        <WithdrawDialog
+          tokens={assetsFromBackend}
+          onSuccess={handleDepositSuccess}
+        />
 
         <SendTokenDialog
           tokens={assetsFromBackend}
@@ -347,11 +331,10 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as "tokens" | "history")}
-              className={`pb-4 text-sm font-medium transition-colors relative ${
-                activeTab === tab.id
+              className={`pb-4 text-sm font-medium transition-colors relative ${activeTab === tab.id
                   ? "text-white"
                   : "text-white/40 hover:text-white/60"
-              }`}
+                }`}
             >
               {tab.label}
               {activeTab === tab.id && (

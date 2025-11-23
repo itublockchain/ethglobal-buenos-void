@@ -285,8 +285,8 @@ export function DepositDialog({
                       currentStep === 1
                         ? "0%"
                         : currentStep === 2
-                        ? "50%"
-                        : "100%",
+                          ? "50%"
+                          : "100%",
                   }}
                   transition={{ duration: 0.5, ease: "circOut" }}
                 />
@@ -302,11 +302,10 @@ export function DepositDialog({
                       className="relative z-10 flex flex-col items-center gap-2"
                     >
                       <motion.div
-                        className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-500 border backdrop-blur-md ${
-                          isActive
-                            ? "bg-white text-black border-white shadow-[0_0_20px_rgba(255,255,255,0.4)]"
-                            : "bg-black/40 text-white/20 border-white/10"
-                        }`}
+                        className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-500 border backdrop-blur-md ${isActive
+                          ? "bg-white text-black border-white shadow-[0_0_20px_rgba(255,255,255,0.4)]"
+                          : "bg-black/40 text-white/20 border-white/10"
+                          }`}
                         animate={{
                           scale: isCurrent ? 1.08 : 1,
                           y: isCurrent ? -1 : 0,
@@ -315,15 +314,14 @@ export function DepositDialog({
                         {isCompleted ? <Check className="w-3.5 h-3.5" /> : step}
                       </motion.div>
                       <span
-                        className={`text-[9px] uppercase tracking-[0.2em] font-medium transition-colors duration-300 ${
-                          isCurrent ? "text-white" : "text-white/20"
-                        }`}
+                        className={`text-[9px] uppercase tracking-[0.2em] font-medium transition-colors duration-300 ${isCurrent ? "text-white" : "text-white/20"
+                          }`}
                       >
                         {step === 1
                           ? "Select"
                           : step === 2
-                          ? "Approve"
-                          : "Deposit"}
+                            ? "Approve"
+                            : "Deposit"}
                       </span>
                     </div>
                   );
@@ -359,11 +357,10 @@ export function DepositDialog({
                     </div>
 
                     <div
-                      className={`space-y-4 transition-all duration-500 ${
-                        selectedToken
-                          ? "opacity-100 translate-y-0"
-                          : "opacity-30 translate-y-4 pointer-events-none blur-sm"
-                      }`}
+                      className={`space-y-4 transition-all duration-500 ${selectedToken
+                        ? "opacity-100 translate-y-0"
+                        : "opacity-30 translate-y-4 pointer-events-none blur-sm"
+                        }`}
                     >
                       <div className="flex items-center justify-between px-1">
                         <label className="text-[10px] uppercase tracking-[0.2em] text-white/60 font-semibold">
@@ -424,15 +421,14 @@ export function DepositDialog({
                     {(() => {
                       const logoUrl = selectedToken
                         ? selectedToken.logo ||
-                          getTokenLogoUrl(selectedToken.address)
+                        getTokenLogoUrl(selectedToken.address)
                         : "";
                       return (
                         <div
-                          className={`w-16 h-16 rounded-full border border-white/10 flex items-center justify-center backdrop-blur-md overflow-hidden ${
-                            !logoUrl
-                              ? "bg-gradient-to-br from-white/10 to-transparent"
-                              : ""
-                          }`}
+                          className={`w-16 h-16 rounded-full border border-white/10 flex items-center justify-center backdrop-blur-md overflow-hidden ${!logoUrl
+                            ? "bg-gradient-to-br from-white/10 to-transparent"
+                            : ""
+                            }`}
                         >
                           {logoUrl ? (
                             <img
@@ -535,13 +531,12 @@ export function DepositDialog({
                           {(() => {
                             const logoUrl = selectedToken
                               ? selectedToken.logo ||
-                                getTokenLogoUrl(selectedToken.address)
+                              getTokenLogoUrl(selectedToken.address)
                               : "";
                             return (
                               <div
-                                className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] overflow-hidden ${
-                                  !logoUrl ? "bg-white/10" : ""
-                                }`}
+                                className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] overflow-hidden ${!logoUrl ? "bg-white/10" : ""
+                                  }`}
                               >
                                 {logoUrl ? (
                                   <img
@@ -641,7 +636,7 @@ export function DepositDialog({
                       isDepositPending ||
                       isDepositConfirming
                     }
-                    className="h-12 px-6 text-white/40 hover:text-white hover:bg-white/5 uppercase tracking-widest text-xs font-medium rounded-xl"
+                    className="h-12 px-6 text-white/40 hover:text-white hover:bg-white/5 uppercase tracking-widest text-xs font-medium rounded-none"
                   >
                     Back
                   </Button>
@@ -675,12 +670,12 @@ export function DepositDialog({
                   {currentStep === 1
                     ? "Continue"
                     : currentStep === 2
-                    ? isApprovePending || isApproveConfirming
-                      ? "Approving..."
-                      : "Approve Token"
-                    : isDepositPending || isDepositConfirming
-                    ? "Depositing..."
-                    : "Confirm Deposit"}
+                      ? isApprovePending || isApproveConfirming
+                        ? "Approving..."
+                        : "Approve Token"
+                      : isDepositPending || isDepositConfirming
+                        ? "Depositing..."
+                        : "Confirm Deposit"}
                 </Button>
               </div>
             </div>
