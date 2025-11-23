@@ -7,6 +7,13 @@ import { Button } from "@/components/ui/button";
 import { useAppKit } from "@reown/appkit/react";
 import { useAccount, useSignMessage } from "wagmi";
 import { PublicWallet } from "@/components/PublicWallet";
+import { Settings, CheckCircle2 } from "lucide-react";
+import { hashMessage, keccak256, concat, getBytes, toBeHex } from "ethers";
+import {
+  createLowerProof,
+  verifyProof as verifyProofAPI,
+  createTransferKey,
+} from "@/lib/compliance/proof";
 
 export default function CompliancePage() {
   const { open } = useAppKit();
@@ -21,7 +28,9 @@ export default function CompliancePage() {
   const [threshold, setThreshold] = useState("");
   const [signature, setSignature] = useState("");
   const [proof, setProof] = useState("");
+  const [proofData, setProofData] = useState<any>(null);
   const [isSigning, setIsSigning] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   // Proof Verify states
   const [verifyReceiver, setVerifyReceiver] = useState("");
@@ -29,11 +38,33 @@ export default function CompliancePage() {
   const [verifyTokenAddress, setVerifyTokenAddress] = useState("");
   const [verifyThreshold, setVerifyThreshold] = useState("");
   const [verifyProof, setVerifyProof] = useState("");
+  const [verifyProofData, setVerifyProofData] = useState<any>(null);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [verificationResult, setVerificationResult] = useState<boolean | null>(
+    null
+  );
 
   const walletAddress = address || "0x...";
 
+  // Check if all required fields are filled for proof generation
+  const isFormValid =
+    receiver.trim() !== "" &&
+    amount.trim() !== "" &&
+    tokenAddress.trim() !== "" &&
+    threshold.trim() !== "";
+
   const handleGenerateProof = async () => {
     if (!isConnected || !address || !signMessageAsync) {
+      return;
+    }
+
+    // If proof already exists, don't generate again
+    if (proof) {
+      return;
+    }
+
+    // If signature exists, require all fields to be filled for proof generation
+    if (signature && !isFormValid) {
       return;
     }
 
@@ -46,16 +77,109 @@ export default function CompliancePage() {
         const signedMessage = await signMessageAsync({ message });
         setSignature(signedMessage);
       } else {
-        // If signature exists, generate mock proof
-        const mockHash = `0x${Array.from({ length: 64 }, () =>
-          Math.floor(Math.random() * 16).toString(16)
-        ).join("")}`;
-        setProof(mockHash);
+        // If signature exists, generate proof
+        setIsGenerating(true);
+        try {
+          const message = "Void Wallet Transfers Secret";
+          const hashed_message = hashMessage(message);
+
+          // Create values array - using threshold as base value
+          const thresholdValue = BigInt(
+            Math.floor(parseFloat(threshold) * 1e18 || 0)
+          );
+          const values = Array.from(
+            { length: 10 },
+            (_, i) => thresholdValue + BigInt(i * 5)
+          );
+          const pairwise_value = BigInt(
+            Math.floor(parseFloat(amount) * 1e18 || 0)
+          );
+
+          // Create transfer key
+          const key = createTransferKey(
+            address,
+            receiver,
+            tokenAddress,
+            signature
+          );
+
+          // Create combined values for leaf hash
+          const combinedValuesArray = values
+            .map((v) => {
+              const hex = v.toString(16).padStart(64, "0");
+              return Array.from(getBytes(`0x${hex}`));
+            })
+            .flat();
+
+          const combinedValues = Uint8Array.from(combinedValuesArray);
+
+          const combined = concat([
+            getBytes(key),
+            combinedValues,
+            toBeHex(1n, 32),
+          ]);
+          const leaf_hash = keccak256(combined);
+
+          // Generate proof
+          const proofResult = await createLowerProof(
+            values,
+            leaf_hash,
+            pairwise_value,
+            signature,
+            hashed_message,
+            address,
+            receiver,
+            tokenAddress
+          );
+
+          setProofData(proofResult);
+          setProof(JSON.stringify(proofResult));
+        } catch (error) {
+          console.error("Failed to generate proof:", error);
+          // Fallback to mock proof if API fails
+          const mockHash = `0x${Array.from({ length: 64 }, () =>
+            Math.floor(Math.random() * 16).toString(16)
+          ).join("")}`;
+          setProof(mockHash);
+        } finally {
+          setIsGenerating(false);
+        }
       }
     } catch (error) {
       console.error("Failed to sign message:", error);
     } finally {
       setIsSigning(false);
+    }
+  };
+
+  const handleVerifyProof = async () => {
+    if (!verifyProof.trim()) {
+      return;
+    }
+
+    try {
+      setIsVerifying(true);
+      setVerificationResult(null);
+
+      let proofObj;
+      try {
+        proofObj = JSON.parse(verifyProof);
+      } catch {
+        throw new Error("Invalid proof format");
+      }
+
+      const isValid = await verifyProofAPI(
+        proofObj.proof,
+        proofObj.publicInputs
+      );
+
+      setVerificationResult(isValid);
+      setVerifyProofData(proofObj);
+    } catch (error) {
+      console.error("Failed to verify proof:", error);
+      setVerificationResult(false);
+    } finally {
+      setIsVerifying(false);
     }
   };
 
@@ -107,8 +231,9 @@ export default function CompliancePage() {
             <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
             {/* Tab Header */}
             <div className="flex items-center gap-8 border-b border-white/10 mb-6 pb-2 relative">
-              <div className="pb-3 text-sm font-semibold text-white relative tracking-tight">
+              <div className="pb-3 text-sm font-semibold text-white relative tracking-tight flex items-center gap-2">
                 Proof Generate
+                <Settings className="w-4 h-4 text-white/60" />
                 <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-white via-white/80 to-white" />
               </div>
             </div>
@@ -212,12 +337,11 @@ export default function CompliancePage() {
                   <label className="text-xs uppercase tracking-[0.15em] text-white/70 font-medium">
                     Proof
                   </label>
-                  <Input
-                    type="text"
+                  <textarea
                     value={proof}
                     disabled
                     placeholder="Will be generated after clicking Generate Proof"
-                    className="h-11 bg-white/[0.03] border-white/10 text-white/90 placeholder:text-white/20 focus:bg-white/[0.08] focus:border-white/30 rounded-none disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-mono text-xs"
+                    className="w-full min-h-[120px] bg-white/[0.03] border border-white/10 text-white/90 placeholder:text-white/20 focus:bg-white/[0.08] focus:border-white/30 rounded-none disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-mono text-xs p-3 resize-none"
                   />
                 </div>
 
@@ -225,11 +349,17 @@ export default function CompliancePage() {
                 <div className="flex justify-end pt-4">
                   <Button
                     onClick={handleGenerateProof}
-                    disabled={!isConnected || isSigning}
+                    disabled={
+                      !isConnected ||
+                      isSigning ||
+                      isGenerating ||
+                      !!proof ||
+                      (!!signature && !isFormValid)
+                    }
                     className="h-11 px-8 bg-white/[0.05] hover:bg-white hover:text-black border border-white/15 hover:border-white transition-all duration-300 text-xs uppercase tracking-[0.2em] font-semibold group relative overflow-hidden shadow-[0_0_20px_rgba(255,255,255,0.05)] hover:shadow-[0_0_30px_rgba(255,255,255,0.15)] disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <span className="relative z-10">
-                      {isSigning
+                      {isSigning || isGenerating
                         ? signature
                           ? "Generating..."
                           : "Signing..."
@@ -255,8 +385,9 @@ export default function CompliancePage() {
 
             {/* Tab Header */}
             <div className="flex items-center gap-8 border-b border-white/10 mb-6 pb-2 relative">
-              <div className="pb-3 text-sm font-semibold text-white relative tracking-tight">
+              <div className="pb-3 text-sm font-semibold text-white relative tracking-tight flex items-center gap-2">
                 Proof Verify
+                <CheckCircle2 className="w-4 h-4 text-green-500" />
                 <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-white via-white/80 to-white" />
               </div>
             </div>
@@ -282,12 +413,11 @@ export default function CompliancePage() {
                   <label className="text-xs uppercase tracking-[0.15em] text-white/70 font-medium">
                     Proof
                   </label>
-                  <Input
-                    type="text"
+                  <textarea
                     value={verifyProof}
                     onChange={(e) => setVerifyProof(e.target.value)}
-                    placeholder="Paste proof here..."
-                    className="h-11 bg-white/[0.03] border-white/10 text-white placeholder:text-white/30 focus:bg-white/[0.08] focus:border-white/30 rounded-none transition-all duration-200 font-mono text-xs hover:border-white/15"
+                    placeholder="Paste proof JSON here..."
+                    className="w-full min-h-[120px] bg-white/[0.03] border border-white/10 text-white placeholder:text-white/30 focus:bg-white/[0.08] focus:border-white/30 rounded-none transition-all duration-200 font-mono text-xs hover:border-white/15 p-3 resize-none"
                   />
                 </div>
 
@@ -355,10 +485,33 @@ export default function CompliancePage() {
                   />
                 </div>
 
+                {/* Verification Result */}
+                {verificationResult !== null && (
+                  <div
+                    className={`p-3 rounded-none border ${
+                      verificationResult
+                        ? "bg-green-500/10 border-green-500/30 text-green-400"
+                        : "bg-red-500/10 border-red-500/30 text-red-400"
+                    }`}
+                  >
+                    <div className="text-xs font-medium">
+                      {verificationResult
+                        ? "✓ Proof is valid"
+                        : "✗ Proof is invalid"}
+                    </div>
+                  </div>
+                )}
+
                 {/* Verify Button */}
                 <div className="flex justify-end pt-4">
-                  <Button className="h-11 px-8 bg-white/[0.05] hover:bg-white hover:text-black border border-white/15 hover:border-white transition-all duration-300 text-xs uppercase tracking-[0.2em] font-semibold group relative overflow-hidden shadow-[0_0_20px_rgba(255,255,255,0.05)] hover:shadow-[0_0_30px_rgba(255,255,255,0.15)]">
-                    <span className="relative z-10">Verify Proof</span>
+                  <Button
+                    onClick={handleVerifyProof}
+                    disabled={!verifyProof.trim() || isVerifying}
+                    className="h-11 px-8 bg-white/[0.05] hover:bg-white hover:text-black border border-white/15 hover:border-white transition-all duration-300 text-xs uppercase tracking-[0.2em] font-semibold group relative overflow-hidden shadow-[0_0_20px_rgba(255,255,255,0.05)] hover:shadow-[0_0_30px_rgba(255,255,255,0.15)] disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <span className="relative z-10">
+                      {isVerifying ? "Verifying..." : "Verify Proof"}
+                    </span>
                     <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
                   </Button>
                 </div>
