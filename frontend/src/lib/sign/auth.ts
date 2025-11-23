@@ -42,6 +42,8 @@ export const clearAuthToken = () => {
   }
   try {
     window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+    // Also clear balance cache on logout
+    window.localStorage.removeItem("VOID_WALLET_BALANCES");
   } catch (error) {
     console.error("Failed to clear auth token:", error);
   }

@@ -13,17 +13,15 @@ import {
 } from "@/components/ui/dialog";
 import {
     useAccount,
-    useBalance,
-    useReadContracts,
     useWaitForTransactionReceipt,
     useWriteContract,
 } from "wagmi";
 import { erc20Abi, formatUnits, parseUnits, type Address } from "viem";
 import { baseSepolia } from "viem/chains";
 import { getTokenLogoUrl } from "@/lib/utils";
+import { usePublicWalletTokens } from "@/hooks/usePublicWalletTokens";
 
-import { formatTokenBalance } from "./utils";
-import { VOID_CONTRACT_ADDRESS, VOID_CONTRACT_ABI, SUPPORTED_TOKENS } from "./constants";
+import { VOID_CONTRACT_ADDRESS, VOID_CONTRACT_ABI } from "./constants";
 import { TokenSelector } from "./ui/TokenSelector";
 
 export function DepositDialog({
@@ -47,99 +45,8 @@ export function DepositDialog({
         onSuccessRef.current = onSuccess;
     }, [onSuccess]);
 
-    // Fetch public wallet ETH balance
-    const { data: ethBalance } = useBalance({
-        address,
-        chainId: baseSepolia.id,
-    });
-
-    // Get ERC20 token addresses from SUPPORTED_TOKENS
-    const erc20Tokens = useMemo(
-        () => SUPPORTED_TOKENS.filter((t) => t.type === "erc20"),
-        []
-    );
-
-    // Fetch balances and allowances for ERC20 tokens
-    const { data: tokenData } = useReadContracts({
-        contracts: erc20Tokens.flatMap((token) => [
-            {
-                address: token.address as Address,
-                abi: erc20Abi,
-                functionName: "balanceOf",
-                args: [address!],
-                chainId: baseSepolia.id,
-            },
-            {
-                address: token.address as Address,
-                abi: erc20Abi,
-                functionName: "allowance",
-                args: [address!, VOID_CONTRACT_ADDRESS],
-                chainId: baseSepolia.id,
-            },
-        ]),
-        query: {
-            enabled: !!address && erc20Tokens.length > 0,
-        },
-    });
-
-    // Build list of tokens with balances
-    const publicWalletTokens = useMemo(() => {
-        const tokens: Array<{
-            address: Address;
-            symbol: string;
-            decimals: number;
-            balance: bigint;
-            allowance: bigint;
-            formattedBalance: string;
-        }> = [];
-
-        // Add ETH if we have balance
-        if (ethBalance) {
-            tokens.push({
-                address: "0x0000000000000000000000000000000000000000" as Address,
-                symbol: "ETH",
-                decimals: 18,
-                balance: ethBalance.value,
-                allowance: 0n, // ETH doesn't need approval
-                formattedBalance: formatTokenBalance(
-                    ethBalance.value,
-                    18
-                ),
-            });
-        }
-
-        // Add ERC20 tokens
-        if (tokenData) {
-            erc20Tokens.forEach((token, index) => {
-                const baseIndex = index * 2;
-                const balanceResult = tokenData[baseIndex];
-                const allowanceResult = tokenData[baseIndex + 1];
-
-                const balance =
-                    balanceResult?.status === "success"
-                        ? (balanceResult.result as bigint)
-                        : 0n;
-                const allowance =
-                    allowanceResult?.status === "success"
-                        ? (allowanceResult.result as bigint)
-                        : 0n;
-
-                tokens.push({
-                    address: token.address as Address,
-                    symbol: token.symbol,
-                    decimals: token.decimals,
-                    balance,
-                    allowance,
-                    formattedBalance: formatTokenBalance(
-                        balance,
-                        token.decimals
-                    ),
-                });
-            });
-        }
-
-        return tokens;
-    }, [ethBalance, tokenData, erc20Tokens]);
+    // Automatically discover and fetch all ERC20 tokens from user's wallet
+    const { tokens: publicWalletTokens, isLoading: isTokensLoading, error: tokensError } = usePublicWalletTokens();
 
     const selectedToken = publicWalletTokens.find(
         (t) => t.address === selectedTokenAddress
@@ -340,6 +247,15 @@ export function DepositDialog({
                             Please connect your wallet to continue.
                         </p>
                     </div>
+                ) : tokensError ? (
+                    <div className="p-12 text-center">
+                        <div className="w-20 h-20 rounded-full bg-red-500/10 flex items-center justify-center mx-auto mb-6 text-red-400 border border-red-500/20">
+                            <ArrowDownLeft className="w-8 h-8" />
+                        </div>
+                        <p className="text-red-400 text-sm font-light">
+                            Failed to load tokens. Please try again.
+                        </p>
+                    </div>
                 ) : (
                     <div className="flex flex-col max-h-[600px]">
                         {/* Progress Steps - Premium */}
@@ -422,6 +338,7 @@ export function DepositDialog({
                                                 tokens={publicWalletTokens}
                                                 selectedTokenAddress={selectedTokenAddress}
                                                 onSelect={(addr) => setSelectedTokenAddress(addr as Address)}
+                                                isLoading={isTokensLoading}
                                             />
                                         </div>
 
@@ -489,7 +406,7 @@ export function DepositDialog({
                                     <div className="flex flex-col h-full justify-start items-center text-center space-y-4">
                                         {(() => {
                                             const logoUrl = selectedToken
-                                                ? getTokenLogoUrl(selectedToken.address)
+                                                ? (selectedToken.logo || getTokenLogoUrl(selectedToken.address))
                                                 : "";
                                             return (
                                                 <div
@@ -598,7 +515,7 @@ export function DepositDialog({
                                                 <div className="flex items-center gap-2">
                                                     {(() => {
                                                         const logoUrl = selectedToken
-                                                            ? getTokenLogoUrl(selectedToken.address)
+                                                            ? (selectedToken.logo || getTokenLogoUrl(selectedToken.address))
                                                             : "";
                                                         return (
                                                             <div

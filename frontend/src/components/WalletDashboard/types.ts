@@ -22,6 +22,7 @@ export interface Asset {
     amount: number;
     value: number;
     address?: string;
+    logo?: string;
 }
 
 export interface Wallet {

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { useAppKit } from "@reown/appkit/react";
 import { useAccount } from "wagmi";
@@ -9,7 +10,11 @@ import { PublicWallet } from "@/components/PublicWallet";
 import { SignMessageSection } from "@/components/SignMessageSection";
 import { WalletDashboard } from "@/components/WalletDashboard";
 import { NotificationMock } from "@/components/NotificationMock";
-import { readPersistedAuthToken, validateTokenWallet, clearAuthToken } from "@/lib/sign/auth";
+import {
+  readPersistedAuthToken,
+  validateTokenWallet,
+  clearAuthToken,
+} from "@/lib/sign/auth";
 
 const ACCOUNT_DATA = {
   id: "1",
@@ -44,7 +49,9 @@ export default function Dashboard() {
 
       // Validate token wallet address matches connected address
       if (address && !validateTokenWallet(token, address)) {
-        console.warn("Token wallet address does not match connected wallet. Clearing token...");
+        console.warn(
+          "Token wallet address does not match connected wallet. Clearing token..."
+        );
         clearAuthToken();
         setIsSigned(false);
         setTimeout(() => setIsAppLoading(false), 700);
@@ -137,8 +144,14 @@ export default function Dashboard() {
     return (
       <main className="min-h-screen w-full bg-black text-white grid place-items-center">
         <div className="w-full max-w-md space-y-6 text-center px-4">
-          <div className="text-xs uppercase tracking-[0.7em] text-white/40">
-            Void Wallet
+          <div className="flex justify-center items-center opacity-60">
+            <Image
+              src="/VoidWallet.svg"
+              alt="Void Wallet"
+              width={600}
+              height={130}
+              className="h-32 w-auto"
+            />
           </div>
           <Button
             onClick={() => open({ view: "Connect" })}
@@ -158,8 +171,14 @@ export default function Dashboard() {
       <section className="flex-1 flex flex-col relative bg-black">
         {/* Navbar / Top Section */}
         <header className="flex items-center justify-between px-12 py-8 z-20 relative">
-          <div className="text-xl font-bold tracking-[0.2em] uppercase text-white">
-            Void Wallet
+          <div className="flex items-center">
+            <Image
+              src="/VoidWallet.svg"
+              alt="Void Wallet"
+              width={280}
+              height={60}
+              className="h-12 w-auto"
+            />
           </div>
           <div className="flex items-center gap-4">
             <NotificationMock />
@@ -171,8 +190,9 @@ export default function Dashboard() {
         <div className="absolute top-0 left-0 w-full h-[500px] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white/5 via-black to-black pointer-events-none" />
 
         <div
-          className={`flex-1 px-12 max-w-5xl mx-auto w-full z-10 flex flex-col ${!isSigned ? "pt-20" : ""
-            }`}
+          className={`flex-1 px-12 max-w-5xl mx-auto w-full z-10 flex flex-col ${
+            !isSigned ? "pt-20" : ""
+          }`}
         >
           {isAppLoading ? (
             <div className="space-y-6 w-full">

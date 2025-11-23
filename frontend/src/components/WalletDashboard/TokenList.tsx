@@ -58,7 +58,8 @@ export function TokenList({
                     {assets.map((asset, i) => {
                         const portfolioPercentage = (asset.value / totalUsd) * 100;
 
-                        const logoUrl = asset.address ? getTokenLogoUrl(asset.address) : "";
+                        // Prioritize asset.logo from Alchemy, fallback to getTokenLogoUrl
+                        const logoUrl = asset.logo || (asset.address ? getTokenLogoUrl(asset.address) : "");
 
                         return (
                             <motion.div

@@ -1,23 +1,34 @@
 import { type Address } from "viem";
 import { SupportedToken } from "./types";
 
+// Known token addresses on Base Sepolia
+// Metadata (symbol, name, decimals, logo) will be fetched from Alchemy API
 export const SUPPORTED_TOKENS: SupportedToken[] = [
     {
         id: "eth",
-        symbol: "ETH",
-        name: "Ether",
+        symbol: "ETH", // Fallback if API fails
+        name: "Ether", // Fallback if API fails
         type: "native",
         decimals: 18,
         description: "Native token on Base Sepolia",
     },
     {
         id: "usdc",
-        symbol: "USDC",
+        symbol: "USDC", // Will be overridden by API data
         name: "USD Coin",
         type: "erc20",
         decimals: 6,
         address: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
-        description: "Circle USD Coin on Base Sepolia",
+        description: "Token on Base Sepolia",
+    },
+    {
+        id: "eurc",
+        symbol: "EURC", // Will be overridden by API data
+        name: "Euro Coin",
+        type: "erc20",
+        decimals: 6,
+        address: "0x808456652fdb597867f38412077A9182bf77359F",
+        description: "Token on Base Sepolia",
     },
 ];
 

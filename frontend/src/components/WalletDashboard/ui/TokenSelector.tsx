@@ -8,6 +8,7 @@ interface TokenItem {
     address: string;
     symbol: string;
     formattedBalance: string;
+    logo?: string;
     // any extra fields you need
 }
 
@@ -17,6 +18,7 @@ interface TokenSelectorProps {
     onSelect: (address: string) => void;
     // optional search – for DepositDialog we don't need it, but we keep the prop for reuse
     searchable?: boolean;
+    isLoading?: boolean;
 }
 
 export const TokenSelector: React.FC<TokenSelectorProps> = ({
@@ -24,6 +26,7 @@ export const TokenSelector: React.FC<TokenSelectorProps> = ({
     selectedTokenAddress,
     onSelect,
     searchable = false,
+    isLoading = false,
 }) => {
     const [searchQuery, setSearchQuery] = React.useState("");
 
@@ -48,14 +51,34 @@ export const TokenSelector: React.FC<TokenSelectorProps> = ({
                 </div>
             )}
             <div className="grid gap-3">
-                {filtered.length === 0 ? (
+                {isLoading ? (
+                    <>
+                        {[1, 2, 3].map((i) => (
+                            <div
+                                key={i}
+                                className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 animate-pulse"
+                            >
+                                <div className="flex items-center gap-4">
+                                    <div className="w-10 h-10 rounded-full bg-white/10" />
+                                    <div className="space-y-2">
+                                        <div className="h-4 w-16 bg-white/10 rounded" />
+                                        <div className="h-3 w-24 bg-white/10 rounded" />
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </>
+                ) : filtered.length === 0 ? (
                     <div className="text-center py-10 border border-dashed border-white/10 rounded-2xl bg-white/[0.02]">
                         <span className="text-sm text-white/40 font-light">No assets found</span>
                     </div>
                 ) : (
                     filtered.map((token) => {
                         const isSelected = selectedTokenAddress === token.address;
-                        const logoUrl = getTokenLogoUrl(token.address);
+                        // Prioritize Alchemy logo, fallback to getTokenLogoUrl
+                        const logoUrl = token.logo || getTokenLogoUrl(token.address);
+                        const fallbackLogoUrl = token.logo ? getTokenLogoUrl(token.address) : "";
+                        
                         return (
                             <motion.button
                                 key={token.address}
@@ -75,9 +98,16 @@ export const TokenSelector: React.FC<TokenSelectorProps> = ({
                                                 alt={token.symbol}
                                                 className="w-full h-full object-contain bg-transparent"
                                                 onError={(e) => {
-                                                    e.currentTarget.style.display = "none";
-                                                    const parent = e.currentTarget.parentElement!;
-                                                    parent.textContent = token.symbol[0];
+                                                    // Try fallback URL if primary fails
+                                                    if (fallbackLogoUrl && e.currentTarget.src !== fallbackLogoUrl) {
+                                                        e.currentTarget.src = fallbackLogoUrl;
+                                                    } else {
+                                                        // If all fails, show symbol initial
+                                                        e.currentTarget.style.display = "none";
+                                                        const parent = e.currentTarget.parentElement!;
+                                                        parent.textContent = token.symbol[0];
+                                                        parent.className = "w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-sm font-bold overflow-hidden";
+                                                    }
                                                 }}
                                             />
                                         ) : (

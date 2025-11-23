@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { WalletDashboard } from "@/components/WalletDashboard";
 
 const DEMO_ACCOUNT_DATA = {
@@ -45,8 +46,14 @@ export default function DemoDashboard() {
       <section className="flex-1 flex flex-col relative bg-black">
         {/* Navbar / Top Section */}
         <header className="flex items-center justify-between px-12 py-8 z-20 relative">
-          <div className="text-xl font-bold tracking-[0.2em] uppercase text-white">
-            Void Wallet
+          <div className="flex items-center">
+            <Image
+              src="/VoidWallet.svg"
+              alt="Void Wallet"
+              width={280}
+              height={60}
+              className="h-12 w-auto"
+            />
           </div>
           <div className="flex items-center gap-4">
             <div className="text-sm text-white/60">

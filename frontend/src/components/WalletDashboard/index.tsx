@@ -98,11 +98,11 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
         };
     }, []);
 
-    const refreshBalances = useCallback(async () => {
+    const refreshBalances = useCallback(async (forceRefresh = false) => {
         try {
             setIsLoadingBalances(true);
             setBalanceError(null);
-            const data = await fetchWalletBalances();
+            const data = await fetchWalletBalances(forceRefresh);
             setBackendBalances(data.balances);
         } catch (error) {
             console.error("Failed to refresh balances:", error);
@@ -200,17 +200,18 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
         }
 
         return backendBalances.map((balance) => {
-            // Find matching token info from SUPPORTED_TOKENS
-            // If balance.token is "0x00...00", it's ETH
+            // Check if it's ETH (native token)
             const isEth =
                 balance.token === "0x0000000000000000000000000000000000000000";
+            
+            // Find matching token from SUPPORTED_TOKENS (only for fallback)
             const matchingToken = SUPPORTED_TOKENS.find(
                 (t) =>
                     (isEth && t.symbol === "ETH") ||
                     t.address?.toLowerCase() === balance.token.toLowerCase()
             );
 
-            // Try to find metadata from useReadContracts
+            // Try to get on-chain metadata for unknown tokens
             let onChainSymbol: string | undefined;
             let onChainName: string | undefined;
             let onChainDecimals: number | undefined;
@@ -218,53 +219,48 @@ export function WalletDashboard({ wallet }: WalletDashboardProps) {
             if (!isEth && !matchingToken) {
                 const index = unknownTokens.indexOf(balance.token as Address);
                 if (index !== -1) {
-                    // Each token has 3 calls (symbol, name, decimals)
                     const baseIndex = index * 3;
-                    onChainSymbol = tokenMetadata?.[baseIndex]?.result as string;
-                    onChainName = tokenMetadata?.[baseIndex + 1]?.result as string;
-                    onChainDecimals = tokenMetadata?.[baseIndex + 2]
-                        ?.result as unknown as number;
+                    const symbolResult = tokenMetadata?.[baseIndex];
+                    const nameResult = tokenMetadata?.[baseIndex + 1];
+                    const decimalsResult = tokenMetadata?.[baseIndex + 2];
+                    
+                    onChainSymbol = symbolResult?.status === "success" 
+                        ? (symbolResult.result as string)
+                        : undefined;
+                    onChainName = nameResult?.status === "success"
+                        ? (nameResult.result as string) 
+                        : undefined;
+                    onChainDecimals = decimalsResult?.status === "success"
+                        ? (decimalsResult.result as unknown as number)
+                        : undefined;
                 }
             }
 
-            // backend balance.balance is string, parse it safely
-            // If we have onChainDecimals, we should use it to format the raw balance if needed
-            // But for now assuming backend returns formatted or simple string number
             const balanceValue = parseFloat(balance.balance);
+            const amount = !isNaN(balanceValue) ? balanceValue : 0;
 
-            let amount = 0;
-            if (!isNaN(balanceValue)) {
-                amount = balanceValue;
-            }
+            // Priority: on-chain data > backend data > fallback > UNKNOWN
+            const symbol = onChainSymbol || balance.symbol || matchingToken?.symbol || "UNKNOWN";
+            const name = onChainName || (symbol === "ETH" ? "Ether" : onChainName || matchingToken?.name || symbol);
 
-            const symbol =
-                matchingToken?.symbol || onChainSymbol || balance.symbol || "UNKNOWN";
-
-            const name =
-                matchingToken?.name ||
-                onChainName ||
-                (symbol === "ETH" ? "Ether" : symbol) ||
-                "Unknown Token";
-
-            // TODO: Calculate USD value with real price data
-            const value = amount * (symbol === "ETH" ? 1800 : 1); // Mock prices
-
-            // Get actual backend token address
-            const tokenAddress = balance.token;
+            // Mock USD pricing
+            const value = amount * (symbol === "ETH" ? 1800 : 1);
 
             return {
                 symbol,
                 name,
                 amount,
                 value,
-                address: tokenAddress,
+                address: balance.token,
+                logo: undefined, // Logo will be fetched by TokenList component
             };
         });
     }, [backendBalances, wallet.assets, tokenMetadata, unknownTokens]);
 
     // Memoized onSuccess callback for DepositDialog
+    // Force refresh to bypass cache after successful transaction
     const handleDepositSuccess = useCallback(async () => {
-        await Promise.all([refreshBalances(), refreshTransactions()]);
+        await Promise.all([refreshBalances(true), refreshTransactions()]);
     }, [refreshBalances, refreshTransactions]);
 
     return (
