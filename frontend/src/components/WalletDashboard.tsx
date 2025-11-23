@@ -521,10 +521,11 @@ export function WalletDashboard({
         {/* Swap - Placeholder for now */}
         <Button
           variant="outline"
-          className="h-14 border-white/10 bg-white/5 hover:bg-white hover:text-black hover:border-white transition-all text-base uppercase tracking-wider font-medium group cursor-pointer"
+          disabled
+          className="h-14 border-white/10 bg-white/5 hover:bg-white/5 hover:text-white/40 hover:border-white/10 transition-all text-base uppercase tracking-wider font-medium group cursor-not-allowed opacity-50"
         >
-          <ArrowLeftRight className="mr-2 w-4 h-4 group-hover:scale-110 transition-transform" />
-          Swap
+          <ArrowLeftRight className="mr-2 w-4 h-4" />
+          Swap <span className="ml-2 text-xs normal-case">soon</span>
         </Button>
       </div>
 
