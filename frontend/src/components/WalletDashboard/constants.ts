@@ -50,6 +50,7 @@ export const VOID_CONTRACT_ABI = [
   },
   {
     inputs: [
+      { internalType: "address", name: "to", type: "address" },
       { internalType: "uint256", name: "amount", type: "uint256" },
       { internalType: "address", name: "tokenAddress", type: "address" },
     ],

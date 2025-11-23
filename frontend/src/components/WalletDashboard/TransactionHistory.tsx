@@ -81,7 +81,7 @@ export function TransactionHistory({
             {/* Empty State */}
             {isEmpty && (
                 <div className="text-center py-20">
-                    <div className="text-white text-lg font-medium">No transactions found</div>
+                    <div className="text-white text-lg font-medium">No transfer found</div>
                 </div>
             )}
 
